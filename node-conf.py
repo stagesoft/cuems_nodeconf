@@ -1,35 +1,45 @@
 
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
 import socket
+import netifaces
 import time
+import uuid
 
-server = "jump.local."
+iface = netifaces.gateways()['default'][netifaces.AF_INET][1]
+ip = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
+str_uuid = str(uuid.uuid4())
+hostname = socket.gethostname()
+server = f"{hostname}.local."
 service_info = ServiceInfo(
         "_cuems-node._tcp.local.",
-        "Cuems node service on jump._cuems-node._tcp.local.",
-        addresses=[socket.inet_aton("192.168.1.12")],
-        port=80,
-        server=server,
+        f"{str_uuid} Cuems node on {hostname}._cuems-node._tcp.local.",
+        addresses=[socket.inet_aton(ip)],
+        port=9000,
     )
 
 class MyListener:
     nodes = dict()
+    def get_host(self, name):
+        return name[51:]
+
+    def get_uuid(self, name):
+        return name[:36]
+        
 
     def remove_service(self, zeroconf, type, name):
         print("Service %s removed" % (name,))
-        del self.nodes[name]
+        del self.nodes[self.get_uuid(name)]
         print(listener.nodes)
 
     def add_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
-        print(info.properties)
-        self.nodes[name] = info.properties[list(info.properties.keys())[0]].decode("utf-8")
+        self.nodes[self.get_uuid(name)] = { 'name' : self.get_host(name), 'node_type': info.properties[list(info.properties.keys())[0]].decode("utf-8"), 'ip' : info.parsed_addresses()[0], 'port': info.port}
         print("Service %s added, service info: %s" % (name, info))
         print(listener.nodes)
 
     def update_service(self, zeroconf, type, name):
         info = zeroconf.get_service_info(type, name)
-        self.nodes[name] = info.properties[list(info.properties.keys())[0]].decode("utf-8")
+        self.nodes[self.get_uuid(name)] = { 'name' : self.get_host(name), 'node_type': info.properties[list(info.properties.keys())[0]].decode("utf-8"), 'ip' : info.parsed_addresses()[0], 'port': info.port}
         print("Service %s updated, service info: %s" % (name, info))
         print(listener.nodes)
 
@@ -42,10 +52,12 @@ listener = MyListener()
 browser = ServiceBrowser(zeroconf, services, listener)
 
 def find_master(nodes):
-    if 'master' in nodes.values():
-        return True
-    else:
-        return False
+    for node in nodes.values():
+        print(node)
+        if 'master' in node.values():
+            return True
+        
+    return False
 
 def register_node(zeroconf_instance, server, service_info, master_exists):
     
@@ -57,10 +69,10 @@ def register_node(zeroconf_instance, server, service_info, master_exists):
         print("master present, We stay as slave")
 
     service_info = ServiceInfo(
-        "_cuems-node._tcp.local.",
-        "Cuems node service on jump._cuems-node._tcp.local.",
-        addresses=[socket.inet_aton("192.168.1.12")],
-        port=80,
+       "_cuems-node._tcp.local.",
+        f"{str_uuid} Cuems node on {hostname}._cuems-node._tcp.local.",
+        addresses=[socket.inet_aton(ip)],
+        port=9000,
         properties={'node_type' : node_type },
         server=server,
         host_ttl=10,
@@ -75,7 +87,6 @@ try:
     print("Registering service")
     register_node(zeroconf, server, service_info, find_master(listener.nodes))
 #    print('\n'.join(ZeroconfServiceTypes.find(zc=zeroconf)))
-    print(listener.nodes)
     input("Press enter to exit...\n\n")
     
 finally:
