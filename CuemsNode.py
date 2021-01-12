@@ -1,3 +1,9 @@
+import enum
+
+@enum.unique
+class NodeType(enum.Enum):
+    slave = 0
+    master = 1
 
 class CuemsNodeDict(dict):
 
@@ -38,6 +44,10 @@ class CuemsNode(dict):
     @property
     def ip(self):
         return super().__getitem__('ip')
+
+    @property
+    def port(self):
+        return super().__getitem__('port')
 
     def __repr__(self):
         return super().__getitem__('node_type')

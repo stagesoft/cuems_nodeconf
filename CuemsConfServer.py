@@ -35,11 +35,12 @@ class CuemsConfServerHandler(socketserver.BaseRequestHandler):
         return socketserver.BaseRequestHandler.finish(self)
 
 class CuemsConfServer(socketserver.TCPServer):
+    allow_reuse_address = True
 
     def __init__(self, server_address,
                  handler_class=CuemsConfServerHandler,
                  ):
-        self.logger = logging.getLogger('EchoServer')
+        self.logger = logging.getLogger('CuemsConfServer')
         self.logger.debug('__init__')
         socketserver.TCPServer.__init__(self, server_address,
                                         handler_class)
