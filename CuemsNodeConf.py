@@ -1,7 +1,6 @@
 
 import socket
 import netifaces
-import uuid
 import threading
 import time
 
@@ -11,33 +10,17 @@ import logging
 
 from CuemsConfServer import CuemsConfServer
 from CuemsAvahiListener import CuemsAvahiListener
+from CuemsNode import CuemsNodeDict
+
+from CuemsSettings import read_conf
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(name)s: %(message)s',
                     )
 
-def get_ip():
-    iface = netifaces.gateways()['default'][netifaces.AF_INET][1]
-    return netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
-
-def read_conf():
-    settings_dict = dict()
-    settings_dict['ip'] = socket.inet_aton(get_ip())
-    settings_dict['uuid'] = str(uuid.uuid4())
-    settings_dict['hostname'] = socket.gethostname()
-    settings_dict['server'] = f"{settings_dict['hostname']}.local."
-    settings_dict['type_'] = "_cuems-nodeconf._tcp.local."
-    settings_dict['name'] = f"{settings_dict['uuid']} Cuems node on {settings_dict['hostname']}._cuems-nodeconf._tcp.local."
-    settings_dict['port'] = 9000
-    #settings_dict['properties'] = {'node_type' : NodeType.slave}
-    settings_dict['properties'] = {'node_type' : 'slave'}
-    settings_dict['host_ttl'] = 10
-    settings_dict['other_ttl'] = 10
-
-    return settings_dict
-
 
 class CuemsNodeConf():
+    nodes = CuemsNodeDict()
 
     def __init__(self, settings_dict=read_conf()):
         self.logger = logging.getLogger('Cuems-NodeConf')
@@ -166,7 +149,7 @@ class CuemsNodeConf():
         self.socket.connect((node.ip, node.port))
         
         # Send the data
-        message = f"Hello from {self.settings_dict['server']}, slave node with uuid: {self.settings_dict['uuid']}".encode()
+        message = f"Hello {self.settings_dict['server']}, master node with uuid: {self.settings_dict['uuid']}".encode()
         self.logger.debug(f'sending data: {message}')
         len_sent = self.socket.send(message)
         
@@ -174,6 +157,21 @@ class CuemsNodeConf():
         self.logger.debug('waiting for response')
         response = self.socket.recv(len_sent)
         self.logger.debug(f'response from server: {response}')
+
+        # Send the data
+        message = f"Conf".encode()
+        self.logger.debug(f'sending data: {message}')
+        len_sent = self.socket.send(message)
+        
+        # Receive a response
+        self.logger.debug('waiting for response')
+        response = self.socket.recv(len_sent)
+        self.logger.debug(f'response from server: {response}')
+
+        node['conf']=response
+        
+        self.nodes[node.uuid] = node
+        self.logger.debug(f"CONFIGURED NODES: {self.nodes}")
 
     def close_server(self):
         self.server.shutdown()

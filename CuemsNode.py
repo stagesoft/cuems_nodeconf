@@ -44,6 +44,10 @@ class CuemsNode(dict):
     def port(self):
         return super().__getitem__('port')
 
+    @property
+    def uuid(self):
+        return super().__getitem__('uuid')
+
     def __repr__(self):
         return super().__getitem__('node_type')
 

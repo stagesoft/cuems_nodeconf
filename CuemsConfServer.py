@@ -1,13 +1,16 @@
 
 import logging
 import socketserver
+import json
+
+from CuemsSettings import read_conf
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(name)s: %(message)s',
                     )
 
 class CuemsConfServerHandler(socketserver.BaseRequestHandler):
-
+    settings_dict = read_conf()
     def __init__(self, request, client_address, server):
         self.logger = logging.getLogger('CuemsConfServerHandler')
         self.logger.debug('__init__')
@@ -26,7 +29,11 @@ class CuemsConfServerHandler(socketserver.BaseRequestHandler):
         # Echo the back to the client
         data = self.request.recv(1024)
         self.logger.debug('recv()->"%s"', data)
-        message = f'Message received {self.server.server_address}, from {self.client_address} '.encode()
+        if 'Hello' in data:
+            message = f"ACK {self.server.server_address}, slave node with uuid: {self.settings_dict['uuid']}".encode()
+        elif "Conf" in data:
+            message = json.dumps({'bla': 'ble', 'mas_conf': {'cositas': ['as', 'dos', 3]}}).encode()
+
         self.request.send(message)
         return
 
