@@ -4,7 +4,7 @@ import logging
 import time
 
 
-from CuemsAvahiListener import CuemsAvahiListener, CuemsNodeConf
+from CuemsNodeConf import CuemsNodeConf
 logging.basicConfig(level=logging.DEBUG,
                     format='%(name)s: %(message)s',
                     )
