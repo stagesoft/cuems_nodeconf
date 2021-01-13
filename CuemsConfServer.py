@@ -28,6 +28,7 @@ class CuemsConfServerHandler(socketserver.BaseRequestHandler):
 
         # Echo the back to the client
         data = self.request.recv(1024)
+        data = data.decode("utf-8")
         self.logger.debug('recv()->"%s"', data)
         if 'Hello' in data:
             message = f"ACK {self.server.server_address}, slave node with uuid: {self.settings_dict['uuid']}".encode()
