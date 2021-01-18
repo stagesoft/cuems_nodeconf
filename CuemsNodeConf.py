@@ -1,4 +1,3 @@
-
 import socket
 import netifaces
 import threading
@@ -8,11 +7,15 @@ from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Ze
 
 import logging
 
-from CuemsConfServer import CuemsConfServer
-from CuemsAvahiListener import CuemsAvahiListener
-from CuemsNode import CuemsNodeDict
+from .CuemsConfServer import CuemsConfServer
+from .CuemsAvahiListener import CuemsAvahiListener
+from .CuemsNode import CuemsNode, CuemsNodeDict
 
-from CuemsSettings import read_conf
+from .CuemsSettings import read_conf
+
+from ..ConfigManager import ConfigManager
+
+CUEMS_CONF_PATH = '/etc/cuems/'
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(name)s: %(message)s',
@@ -29,31 +32,44 @@ class CuemsNodeConf():
         self.client_retryes = 6
         self.client_retry_count_delay = 6
         self.client_retry_count = 0
-        self.master = False
         self.init_done = False
-        self.settings_dict = settings_dict
+        # Conf load manager
+        try:
+            self.cm = ConfigManager(path=CUEMS_CONF_PATH)
+        except FileNotFoundError:
+            self.logger.critical('Node config file could not be found. Exiting !!!!!')
+            exit(-1)
+
         self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+
+        self.settings_dict = settings_dict
         self.services = [self.settings_dict['type_']]
+
         self.listener = CuemsAvahiListener(callback= self.callback)
         self.browser = ServiceBrowser(self.zeroconf, self.services, self.listener)
         time.sleep(2)
+
+        self.node = CuemsNode()
+
         self.master_exists = self.find_master()
 
         if not self.master_exists:
             self.logger.debug('No Master in network, WE ARE MASTER')
-            self.master = True
+            self.node.node_type = 'master'
         else:
+            self.node.node_type = 'slave'
             self.logger.debug('Master present in network WE STAY SLAVE')
 
         self.register_node()
+        
         #time.sleep(2)
         self.check_nodes()
 
         self.init_done = True
 
-        if self.master:
+        if self.node.node_type == 'master':
             self.callback()
-        else: 
+        elif self.node.node_type == 'slave':
             self.start_server()
 
         
@@ -81,7 +97,7 @@ class CuemsNodeConf():
 
     def callback(self):
         #self.logger.debug("callback!!! ")
-        if self.master and self.init_done and self.listener.nodes.slaves:
+        if self.node.node_type == 'master' and self.init_done and self.listener.nodes.slaves:
             self.logger.debug(self.listener.nodes.slaves)
             for node in self.listener.nodes.slaves:
 
@@ -116,15 +132,15 @@ class CuemsNodeConf():
 
 
     def register_node(self):
-        if self.master:
-            self.settings_dict['properties']['node_type'] = "master"
+        
+        self.settings_dict['properties']['node_type'] = self.node.node_type
 
         self.service_info = ServiceInfo(
             self.settings_dict['type_'],
             self.settings_dict['name'],
             addresses = [self.settings_dict['ip']],
             port = self.settings_dict['port'],
-            properties= self.settings_dict['properties'],
+            properties= {'node_type' : self.node.node_type },
             server = self.settings_dict['server'],
             host_ttl=self.settings_dict['host_ttl'],
             other_ttl=self.settings_dict['other_ttl'],
