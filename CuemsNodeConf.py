@@ -50,6 +50,7 @@ class CuemsNodeConf():
         time.sleep(2)
 
         self.node = CuemsNode()
+        self.nodes = CuemsNodeDict()
 
         self.master_exists = self.find_master()
 

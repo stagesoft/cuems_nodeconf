@@ -31,6 +31,11 @@ class CuemsNode(dict):
     @property
     def node_type(self):
         return super().__getitem__('node_type')
+    
+    @node_type.setter
+    def node_type(self, value):
+        return super().__setitem__('node_type', value)
+
 
     @property
     def name(self):

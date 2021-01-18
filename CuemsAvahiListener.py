@@ -1,4 +1,4 @@
-from CuemsNode import CuemsNodeDict, CuemsNode, NodeType
+from .CuemsNode import CuemsNodeDict, CuemsNode, NodeType
 import logging
 
 
