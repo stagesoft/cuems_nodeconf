@@ -27,6 +27,11 @@ class CuemsNodeDict(dict):
     
 
 class CuemsNode(dict):
+
+    def __init__(self, *args, **kwargs):
+        self.configured = False
+        self.present = False
+        super().__init__(*args, **kwargs)
     
     @property
     def node_type(self):
@@ -36,10 +41,27 @@ class CuemsNode(dict):
     def node_type(self, value):
         return super().__setitem__('node_type', value)
 
+    @property
+    def configured(self):
+        return super().__getitem__('configured')
+    
+    @configured.setter
+    def configured(self, value):
+        return super().__setitem__('configured', value)
+
+    @property
+    def present(self):
+        return super().__getitem__('present')
+    
+    @present.setter
+    def present(self, value):
+        return super().__setitem__('present', value)
+
 
     @property
     def name(self):
         return super().__getitem__('name')
+
 
     @property
     def ip(self):
@@ -54,5 +76,4 @@ class CuemsNode(dict):
         return super().__getitem__('uuid')
 
     def __repr__(self):
-        return super().__getitem__('node_type')
-
+        return super().__getitem__('name')

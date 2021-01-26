@@ -50,7 +50,7 @@ class CuemsNodeConf():
         time.sleep(2)
 
         self.node = CuemsNode()
-        self.nodes = CuemsNodeDict()
+
 
         self.master_exists = self.find_master()
 
@@ -96,11 +96,25 @@ class CuemsNodeConf():
         self.client_running = False
 
 
-    def callback(self):
-        #self.logger.debug("callback!!! ")
-        if self.node.node_type == 'master' and self.init_done and self.listener.nodes.slaves:
+    def callback(self, caller_node=None, action=CuemsAvahiListener.Action.ADD):
+        self.logger.debug(f" {action} callback!!!, Node: {caller_node} ")
+        if not self.init_done:
+            self.logger.debug("INIT NOT DONE")
+            return None
+        if self.node.node_type == 'master' and self.listener.nodes.slaves:
+            if caller_node:
+                if caller_node.node_type == "master":
+                    self.logger.debug("Node is master, ignore")
+                    return None
+                if caller_node.configured == True:
+                    self.logger.debug("Node is allready configured, ignore")
+                    return None
+                slaves_to_ask = [caller_node]
+            else:
+                slaves_to_ask = self.listener.nodes.slaves
+
             self.logger.debug(self.listener.nodes.slaves)
-            for node in self.listener.nodes.slaves:
+            for node in slaves_to_ask:
 
                 self.client_retry_count = 0
                 if self.client_running:
@@ -184,11 +198,19 @@ class CuemsNodeConf():
         self.logger.debug('waiting for response')
         response = self.socket.recv(len_sent)
         self.logger.debug(f'response from server: {response}')
-
+        node.configured = True
         node['conf']=response
         
-        self.nodes[node.uuid] = node
-        self.logger.debug(f"CONFIGURED NODES: {self.nodes}")
+        self.node_conf_received(node)
+        
+
+    def node_conf_received(self, node):
+        self.logger.debug(f"CONFIGURED NODES: {self.listener.nodes}")
+        print(node)
+        self.listener.nodes[node.uuid] = node
+        self.logger.debug(f"New configured node added to list: {node}")
+        self.logger.debug(f"CONFIGURED NODES: {self.listener.nodes}")
+
 
     def close_server(self):
         self.server.shutdown()
