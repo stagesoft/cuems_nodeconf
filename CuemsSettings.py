@@ -18,7 +18,7 @@ def read_conf():
     settings_dict['port'] = 9000
     #settings_dict['properties'] = {'node_type' : NodeType.slave}
     settings_dict['properties'] = {'node_type' : 'slave'}
-    settings_dict['host_ttl'] = 10
-    settings_dict['other_ttl'] = 10
+    settings_dict['host_ttl'] = 50
+    settings_dict['other_ttl'] = 50
 
     return settings_dict

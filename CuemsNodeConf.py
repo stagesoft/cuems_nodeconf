@@ -2,6 +2,8 @@ import socket
 import netifaces
 import threading
 import time
+import os.path
+
 
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
 
@@ -33,6 +35,7 @@ class CuemsNodeConf():
         self.client_retry_count_delay = 6
         self.client_retry_count = 0
         self.init_done = False
+
         # Conf load manager
         try:
             self.cm = ConfigManager(path=CUEMS_CONF_PATH)
@@ -40,6 +43,9 @@ class CuemsNodeConf():
             self.logger.critical('Node config file could not be found. Exiting !!!!!')
             exit(-1)
 
+        self.first_time = os.path.isfile(os.path.join(CUEMS_CONF_PATH, self.cm.autoconf_lock_file))
+        print(os.path.join(CUEMS_CONF_PATH, self.cm.autoconf_lock_file))
+        print(self.first_time)
         self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
 
         self.settings_dict = settings_dict
