@@ -9,6 +9,7 @@ from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Ze
 
 import logging
 
+
 from .CuemsConfServer import CuemsConfServer
 from .CuemsAvahiListener import CuemsAvahiListener
 from .CuemsNode import CuemsNode, CuemsNodeDict
@@ -29,12 +30,8 @@ class CuemsNodeConf():
 
     def __init__(self, settings_dict=read_conf()):
         self.logger = logging.getLogger('Cuems-NodeConf')
-        self.client_running = False
-        self.server_running = False
-        self.client_retryes = 6
-        self.client_retry_count_delay = 6
-        self.client_retry_count = 0
         self.init_done = False
+        self.master = False
 
         # Conf load manager
         try:
@@ -42,10 +39,10 @@ class CuemsNodeConf():
         except FileNotFoundError:
             self.logger.critical('Node config file could not be found. Exiting !!!!!')
             exit(-1)
+        
+        
+        
 
-        self.first_time = os.path.isfile(os.path.join(CUEMS_CONF_PATH, self.cm.autoconf_lock_file))
-        print(os.path.join(CUEMS_CONF_PATH, self.cm.autoconf_lock_file))
-        print(self.first_time)
         self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
 
         self.settings_dict = settings_dict
@@ -57,7 +54,42 @@ class CuemsNodeConf():
 
         self.node = CuemsNode()
 
+        # if autoconf file exists mark first time conf
+        self.first_time = os.path.isfile(os.path.join(CUEMS_CONF_PATH, self.cm.autoconf_lock_file))
+        self.logger.debug(os.path.join(CUEMS_CONF_PATH, self.cm.autoconf_lock_file))
+        self.logger.debug(self.first_time)
 
+        if self.first_time:
+            self.logger.debug("First time conf file detected, triying to autoconfigure node")
+            self.set_node_type()
+            self.create_network_map()
+        else:
+            self.read_conf()
+            if self.master:
+                self.read_network_map()
+                self.check_network_map()
+
+        
+        self.register_node()
+        
+        #time.sleep(2)
+        self.check_nodes()
+
+        self.init_done = True
+
+    def read_conf(self):
+        pass
+
+    def create_network_map(self):
+        pass
+
+    def read_network_map(self):
+        pass
+
+    def check_network_map(self):
+        pass
+
+    def set_node_type(self):
         self.master_exists = self.find_master()
 
         if not self.master_exists:
@@ -67,39 +99,17 @@ class CuemsNodeConf():
             self.node.node_type = 'slave'
             self.logger.debug('Master present in network WE STAY SLAVE')
 
-        self.register_node()
-        
-        #time.sleep(2)
-        self.check_nodes()
 
-        self.init_done = True
+    def cleanup(self):
+        try:
+            os.remove(os.path.join(CUEMS_CONF_PATH, self.cm.autoconf_lock_file))
+        except FileNotFoundError:
+            pass
 
-        if self.node.node_type == 'master':
-            self.callback()
-        elif self.node.node_type == 'slave':
-            self.start_server()
-
-        
-    def client_retry(self, node):
-        self.client_running = True
-        
-        while self.client_retry_count <= self.client_retryes:
-            self.logger.debug(self.client_retry_count)
-            try:
-                self.start_client(node)
-            except Exception as e:
-                self.logger.debug(e)
-            else:
-                self.logger.debug("succesfull connect, exiting retry loop")
-                break
-            finally:
-                self.logger.debug("closing client")
-                self.close_client()
-            self.client_retry_count += 1
-            time.sleep(self.client_retry_count_delay)
-            
-        self.logger.debug("end client retries")
-        self.client_running = False
+        try:
+            os.remove(os.path.join(CUEMS_CONF_PATH, self.cm.show_lock_file))
+        except FileNotFoundError:
+            pass
 
 
     def callback(self, caller_node=None, action=CuemsAvahiListener.Action.ADD):
@@ -167,75 +177,11 @@ class CuemsNodeConf():
             other_ttl=self.settings_dict['other_ttl'],
 
         )
-        self.logger.debug("registering node")
+        self.logger.debug(f"registering node as {self.node.node_type.upper()}")
         self.zeroconf.register_service(self.service_info)
         self.logger.debug("Node registered")
 
-    def start_server(self):
-        address = (self.settings_dict['server'], self.settings_dict['port'])
-        self.server = CuemsConfServer(address)
-        ip, port = self.server.server_address
-        self.server_thread = threading.Thread(target=self.server.serve_forever)
-        self.server_thread.setDaemon(True)
-        self.server_thread.start()
-        self.logger.info('Server on %s:%s', ip, port)
-
-    def start_client(self, node):
-        self.logger.info(f'conecting to slave node on {node.ip}:{node.port}')
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((node.ip, node.port))
-        
-        # Send the data
-        message = f"Hello {self.settings_dict['server']}, master node with uuid: {self.settings_dict['uuid']}".encode()
-        self.logger.debug(f'sending data: {message}')
-        len_sent = self.socket.send(message)
-        
-        # Receive a response
-        self.logger.debug('waiting for response')
-        response = self.socket.recv(len_sent)
-        self.logger.debug(f'response from server: {response}')
-
-        # Send the data
-        message = f"Conf".encode()
-        self.logger.debug(f'sending data: {message}')
-        len_sent = self.socket.send(message)
-        
-        # Receive a response
-        self.logger.debug('waiting for response')
-        response = self.socket.recv(len_sent)
-        self.logger.debug(f'response from server: {response}')
-        node.configured = True
-        node['conf']=response
-        
-        self.node_conf_received(node)
-        
-
-    def node_conf_received(self, node):
-        self.logger.debug(f"CONFIGURED NODES: {self.listener.nodes}")
-        print(node)
-        self.listener.nodes[node.uuid] = node
-        self.logger.debug(f"New configured node added to list: {node}")
-        self.logger.debug(f"CONFIGURED NODES: {self.listener.nodes}")
-
-
-    def close_server(self):
-        self.server.shutdown()
-        self.server.socket.close()
-
-    def close_client(self):
-        self.socket.close()
 
     def shutdown(self):
         self.zeroconf.unregister_service(self.service_info)
         self.zeroconf.close()
-
-        try: 
-            self.server.shutdown()
-            self.server.socket.close()
-        except AttributeError:
-            pass
-
-        try:
-            self.socket.close()
-        except AttributeError:
-            pass
