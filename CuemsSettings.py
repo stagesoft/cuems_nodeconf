@@ -8,9 +8,15 @@ def get_ip():
     return netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
 
 def read_conf():
+    # TEMP FIXX
+    iface = netifaces.gateways()['default'][netifaces.AF_INET][1]
+    mac = netifaces.ifaddresses(iface)[netifaces.AF_LINK][0]['addr']
+    mac = f"this should be uuid{mac}"
+
     settings_dict = dict()
     settings_dict['ip'] = socket.inet_aton(get_ip())
-    settings_dict['uuid'] = str(uuid.uuid4())
+    settings_dict['uuid'] = mac
+    #settings_dict['uuid'] = str(uuid.uuid4())
     settings_dict['hostname'] = socket.gethostname()
     settings_dict['server'] = f"{settings_dict['hostname']}.local."
     settings_dict['type_'] = "_cuems-nodeconf._tcp.local."

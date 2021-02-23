@@ -48,9 +48,7 @@ class CuemsNodeConf():
         self.settings_dict = settings_dict
         self.services = [self.settings_dict['type_']]
 
-        self.listener = CuemsAvahiListener(callback= self.callback)
-        self.browser = ServiceBrowser(self.zeroconf, self.services, self.listener)
-        time.sleep(2)
+        
 
         self.node = CuemsNode()
 
@@ -59,12 +57,16 @@ class CuemsNodeConf():
         self.logger.debug(os.path.join(CUEMS_CONF_PATH, self.cm.autoconf_lock_file))
         self.logger.debug(self.first_time)
 
+        self.start_avahi_listener()
+
+
         if self.first_time:
             self.logger.debug("First time conf file detected, triying to autoconfigure node")
             self.set_node_type()
             self.create_network_map()
         else:
             self.read_conf()
+            
             if self.master:
                 self.read_network_map()
                 self.check_network_map()
@@ -76,6 +78,12 @@ class CuemsNodeConf():
         self.check_nodes()
 
         self.init_done = True
+
+
+    def start_avahi_listener(self):
+        self.listener = CuemsAvahiListener(callback= self.callback)
+        self.browser = ServiceBrowser(self.zeroconf, self.services, self.listener)
+        time.sleep(2)
 
     def read_conf(self):
         pass
@@ -130,15 +138,6 @@ class CuemsNodeConf():
                 slaves_to_ask = self.listener.nodes.slaves
 
             self.logger.debug(self.listener.nodes.slaves)
-            for node in slaves_to_ask:
-
-                self.client_retry_count = 0
-                if self.client_running:
-                    self.logger.debug("reseting client retries")
-                else:
-                    self.logger.debug("callback starting client ")
-                    self.client_thread = threading.Thread(target=self.client_retry, args=[node,])
-                    self.client_thread.start()
 
 
     def find_master(self):
