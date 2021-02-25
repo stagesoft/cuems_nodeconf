@@ -1,6 +1,7 @@
 import socket
 import netifaces
 import uuid
+from .CuemsNode import CuemsNode
 
 
 def get_ip():
@@ -22,8 +23,7 @@ def read_conf():
     settings_dict['type_'] = "_cuems-nodeconf._tcp.local."
     settings_dict['name'] = f"{settings_dict['uuid']} Cuems node on {settings_dict['hostname']}._cuems-nodeconf._tcp.local."
     settings_dict['port'] = 9000
-    #settings_dict['properties'] = {'node_type' : NodeType.slave}
-    settings_dict['properties'] = {'node_type' : 'slave'}
+    settings_dict['properties'] = {'node_type' : CuemsNode.NodeType.slave}
     settings_dict['host_ttl'] = 50
     settings_dict['other_ttl'] = 50
 

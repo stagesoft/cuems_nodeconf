@@ -1,9 +1,6 @@
 import enum
 
-@enum.unique
-class NodeType(enum.Enum):
-    slave = 0
-    master = 1
+
 
 class CuemsNodeDict(dict):
 
@@ -12,7 +9,7 @@ class CuemsNodeDict(dict):
         master_list = list()
 
         for node in super().values():
-            if node.node_type == 'master':
+            if node.node_type == CuemsNode.NodeType.master:
                 master_list.append(node)
         return master_list
     @property
@@ -20,7 +17,7 @@ class CuemsNodeDict(dict):
         slave_list = list()
 
         for node in super().values():
-            if node.node_type == 'slave':
+            if node.node_type == CuemsNode.NodeType.slave:
                 slave_list.append(node)
         return slave_list
         
@@ -28,8 +25,16 @@ class CuemsNodeDict(dict):
 
 class CuemsNode(dict):
 
+    @enum.unique
+    class NodeType(enum.Enum):
+        slave = 0
+        master = 1
+
+        def __repr__(self):
+            return self.name
+
+
     def __init__(self, *args, **kwargs):
-        self.configured = False
         self.present = False
         super().__init__(*args, **kwargs)
     
@@ -41,13 +46,6 @@ class CuemsNode(dict):
     def node_type(self, value):
         return super().__setitem__('node_type', value)
 
-    @property
-    def configured(self):
-        return super().__getitem__('configured')
-    
-    @configured.setter
-    def configured(self, value):
-        return super().__setitem__('configured', value)
 
     @property
     def present(self):
@@ -75,5 +73,6 @@ class CuemsNode(dict):
     def uuid(self):
         return super().__getitem__('uuid')
 
-    def __repr__(self):
-        return super().__getitem__('name')
+    # def __repr__(self):
+    #     _dict = str({"name" : super().__getitem__('name'), "present" : super().__getitem__('present')})
+    #     return _dict
