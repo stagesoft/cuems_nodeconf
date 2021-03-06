@@ -3,7 +3,7 @@ import logging
 import socketserver
 import json
 
-from .CuemsSettings import read_conf
+from CuemsSettings import read_conf
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(name)s: %(message)s',

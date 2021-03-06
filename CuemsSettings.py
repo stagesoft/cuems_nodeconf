@@ -1,7 +1,7 @@
 import socket
 import netifaces
 import uuid
-from .CuemsNode import CuemsNode
+from CuemsNode import CuemsNode
 
 
 def get_ip():

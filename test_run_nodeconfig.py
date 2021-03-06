@@ -27,7 +27,7 @@ server = f"{hostname}.local."
 # for serviceinfo
 
 type_ = "_cuems-nodeconf._tcp.local."
-name = f"{str_uuid} Cuems node on {hostname}._cuems-nodeconf._tcp.local."
+name = f"{str_uuid} Cuems on {hostname}._cuems-nodeconf._tcp.local."
 port = 9000
 
 service_info = ServiceInfo(
@@ -47,10 +47,8 @@ listener = CuemsAvahiListener()
 browser = ServiceBrowser(zeroconf, services, listener)
 
 def find_master(nodes):
-    for node in nodes.values():
-        print(node)
-        if 'master' in node.values():
-            return True
+    if nodes.master:
+        return True
         
     return False
 
@@ -119,7 +117,7 @@ try:
         raise Exception("we have no master!!")
     if listener.nodes.slaves:
         logger.debug(f"we have {len(listener.nodes.slaves)} slaves")
-        logger.debug("slaves: {listener.nodes.slaves}")
+        logger.debug(f"slaves: {listener.nodes.slaves}")
     else:
         logger.debug("we have no slaves")
 
