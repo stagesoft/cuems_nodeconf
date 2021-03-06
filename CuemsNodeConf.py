@@ -70,15 +70,13 @@ class CuemsNodeConf():
             self.logger.debug("First time conf file detected, triying to autoconfigure node")
             self.set_node_type()
             self.register_node()
-            self.create_network_map()
+            self.write_network_map()
             self.autoconf_finished()
         else:
             self.logger.debug("Allready configured, reading conf")
             self.read_node_type()
             self.register_node()
             
-            print(self.node.node_type)
-            print(CuemsNode.NodeType.master)
             if self.node.node_type is CuemsNode.NodeType.master:
                 self.read_network_map()
                 self.check_network_map()
@@ -121,20 +119,49 @@ class CuemsNodeConf():
             self.logger.debug("can not write node type file")
 
 
-    def create_network_map(self):
+    def write_network_map(self, map=None):
+        if not map:
+            map = self.listener.nodes
+
         writer = XmlWriter(schema = self.xsd_path, xmlfile = self.map_path, xml_root_tag='CuemsNetworkMap')
-        writer.write_from_object(self.listener.nodes)
+        writer.write_from_object(map)
 
 
     def read_network_map(self):
         reader = XmlReader(schema = self.xsd_path, xmlfile = self.map_path)
-        self.network_map = reader.read_to_objects()
-        print("---")
-        print(self.network_map)
+        self.network_map = CuemsNodeDict()
+        nodes = reader.read_to_objects()
+        for node in nodes:
+            self.network_map[node.uuid] = node
+        
+        for item, value in self.network_map.items():
+            print("---")
+            print("nodes from xml:")
+            print(value)
         print("---")
 
     def check_network_map(self):
-        pass
+        for uuid, node in self.listener.nodes.items():
+            if uuid in self.network_map:
+                self.network_map[uuid].present = True
+            else:
+                print(f'node {uuid} is new, adding')
+                self.network_map[uuid] = node
+        keys_to_delete = list()
+        for uuid, node in self.network_map.items():
+            if uuid not in self.listener.nodes:
+                print(f'node {uuid} is missing!')
+                keys_to_delete.append(uuid)
+                
+        if keys_to_delete:
+            for key in keys_to_delete:
+                del self.network_map[key]
+        
+
+
+        self.write_network_map(self.network_map)
+        print(f' new network map: {self.network_map}')
+
 
     def cleanup(self):
         try:
