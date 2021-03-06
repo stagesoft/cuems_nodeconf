@@ -93,12 +93,12 @@ try:
         logger.info('Server on %s:%s', ip, port)
     else:
         logger = logging.getLogger('client')
-        logger.info('conecting to master on %s:%s', listener.nodes.master.ip, port)
+        logger.info('conecting to master on %s:%s', listener.nodes.master[0].ip, port)
         # Connect to the server
         logger.debug('creating socket')
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         logger.debug('connecting to server')
-        s.connect((listener.nodes.master.ip, port))
+        s.connect((listener.nodes.master[0].ip, port))
 
         # Send the data
         message = f'Hello from {server}, slave node with uuid: {str_uuid}'.encode()
