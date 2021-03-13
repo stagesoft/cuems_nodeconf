@@ -3,7 +3,7 @@ import netifaces
 import threading
 import time
 import os.path
-
+from os import system
 
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
 
@@ -22,7 +22,8 @@ from ..XmlReaderWriter import XmlReader, XmlWriter
 CUEMS_CONF_PATH = '/etc/cuems/'
 MAP_SCHEMA_FILE = 'network_map.xsd'
 MAP_FILE = 'network_map.xml'
-NODE_FILE = 'node'
+CUEMS_SERVICE_TEMPLATES_PATH = '/usr/share/cuems/'
+CUEMS_SERVICE_FILE = 'cuems.service'
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(name)s: %(message)s',
@@ -34,7 +35,6 @@ class CuemsNodeConf():
 
     def __init__(self, settings_dict=read_conf()):
 
-        
         self.logger = logging.getLogger('Cuems-NodeConf')
         self.init_done = False
 
@@ -48,34 +48,24 @@ class CuemsNodeConf():
 
         self.xsd_path = os.path.join( CUEMS_CONF_PATH, MAP_SCHEMA_FILE)
         self.map_path = os.path.join( CUEMS_CONF_PATH, MAP_FILE)
-        self.node_type_path = os.path.join( CUEMS_CONF_PATH, NODE_FILE)
-        self.autoconf_lock_file_path = os.path.join( CUEMS_CONF_PATH, self.cm.autoconf_lock_file )
 
         self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
 
         self.settings_dict = settings_dict
         self.services = [self.settings_dict['type_']]
 
-        self.node = CuemsNode()
-
-        # if autoconf file exists mark first time conf
-        self.first_time = os.path.isfile(self.autoconf_lock_file_path)
- 
-
         self.start_avahi_listener()
-
         
+        # self.node = CuemsNode()
+        self.node = self.retreive_local_node()
 
-        if self.first_time:
+        if self.node.node_type == CuemsNode.NodeType.firstrun:
             self.logger.debug("First time conf file detected, triying to autoconfigure node")
             self.set_node_type()
-            self.register_node()
+
             self.write_network_map()
-            self.autoconf_finished()
         else:
             self.logger.debug("Allready configured, reading conf")
-            self.read_node_type()
-            self.register_node()
             
             if self.node.node_type is CuemsNode.NodeType.master:
                 self.read_network_map()
@@ -94,31 +84,26 @@ class CuemsNodeConf():
             self.zeroconf, self.services, self.listener)
         time.sleep(2)
 
-    def read_node_type(self):
-        try:
-            with open(self.node_type_path, 'r') as file:
-                self.node.node_type = CuemsNode.NodeType[file.read().rstrip('\r\n')]
-            self.logger.debug(f"We are {self.node.node_type.name.upper()} from conf")
-        except FileNotFoundError:
-            self.logger.debug("can not read node type file")
-
     def set_node_type(self):
-        self.master_exists = self.find_master()
-
-        if not self.master_exists:
+        if not self.listener.nodes.masters:
             self.logger.debug('No Master in network, WE ARE MASTER')
             self.node.node_type = CuemsNode.NodeType.master
+
+            # Copy master node service template
+            source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.master'
+            target = os.path.join('/etc/avahi/services/', CUEMS_SERVICE_FILE)
+            command = f'cp {source} {target}'
+            os.system(command)
+            
         else:
             self.node.node_type = CuemsNode.NodeType.slave
             self.logger.debug('Master present in network WE STAY SLAVE')
+
+            # Copy slave node service template
+            source = os.path.join(CUEMS_CONF_PATH, CUEMS_SERVICE_FILE) + '.slave'
+            target = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE)
+            os.system(f'cp {source} {target}')
         
-        try:
-            with open(self.node_type_path, 'w') as file:
-                file.write(self.node.node_type.name)
-        except FileNotFoundError:
-            self.logger.debug("can not write node type file")
-
-
     def write_network_map(self, map=None):
         if not map:
             map = self.listener.nodes
@@ -141,6 +126,7 @@ class CuemsNodeConf():
         print("---")
 
     def check_network_map(self):
+        '''
         for uuid, node in self.listener.nodes.items():
             if uuid in self.network_map:
                 self.network_map[uuid].present = True
@@ -148,28 +134,22 @@ class CuemsNodeConf():
                 print(f'node {uuid} is new, adding')
                 self.network_map[uuid] = node
         keys_to_delete = list()
+
         for uuid, node in self.network_map.items():
             if uuid not in self.listener.nodes:
                 print(f'node {uuid} is missing!')
                 keys_to_delete.append(uuid)
-                
+                     
         if keys_to_delete:
             for key in keys_to_delete:
                 del self.network_map[key]
+        '''
         
-
-
         self.write_network_map(self.network_map)
-        print(f' new network map: {self.network_map}')
+        print(f' New network map: {self.network_map}')
 
 
     def cleanup(self):
-        try:
-            os.remove(os.path.join(CUEMS_CONF_PATH,
-                                   self.cm.autoconf_lock_file))
-        except FileNotFoundError:
-            pass
-
         try:
             os.remove(os.path.join(CUEMS_CONF_PATH, self.cm.show_lock_file))
         except FileNotFoundError:
@@ -183,17 +163,10 @@ class CuemsNodeConf():
 
         self.check_nodes()
 
-    def find_master(self):
-        for node in self.listener.nodes.values():
-            self.logger.debug(node)
-            if CuemsNode.NodeType.master in node.values():
-                return True
-        return False
-
     def check_nodes(self):
         self.logger.debug(self.listener.nodes)
-        if self.listener.nodes.master:
-            self.logger.debug(f"master: {self.listener.nodes.master}")
+        if self.listener.nodes.masters:
+            self.logger.debug(f"master: {self.listener.nodes.masters}")
         else:
             raise Exception("we have no master!!")
         if self.listener.nodes.slaves:
@@ -220,13 +193,19 @@ class CuemsNodeConf():
         self.zeroconf.register_service(self.service_info)
         self.logger.debug("Node registered")
 
-    def autoconf_finished(self):
-        self.logger.debug("autoconf finished, deleting first_time.lock")
-        try:
-            os.remove(self.autoconf_lock_file_path)
-        except FileNotFoundError as e:
-            self.logger.critical("first_time.lock not found, something is wrong")
-            raise e
+    def check_first_run(self):
+        for node in self.listener.nodes.firstruns:
+            if node.ip == self.settings_dict['ip']:
+                return True
+
+        return False
+    
+    def retreive_local_node(self):
+        for node in self.listener.nodes.values():
+            if node.ip == self.settings_dict['ip']:
+                return node
+        
+        raise Exception('Local node avahi service not detected')
 
     def shutdown(self):
         self.zeroconf.unregister_service(self.service_info)
