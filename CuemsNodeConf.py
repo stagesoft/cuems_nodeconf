@@ -106,8 +106,8 @@ class CuemsNodeConf():
             self.logger.debug('Master present in network WE STAY SLAVE')
 
             # Copy slave node service template
-            source = os.path.join(CUEMS_CONF_PATH, CUEMS_SERVICE_FILE) + '.slave'
-            target = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE)
+            source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.slave'
+            target = os.path.join('/etc/avahi/services/', CUEMS_SERVICE_FILE)
             os.system(f'sudo cp {source} {target}')
         
     def write_network_map(self, map=None):
