@@ -71,6 +71,9 @@ class CuemsNodeConf():
             self.logger.debug("Allready configured, reading conf")
             
             if self.node.node_type is CuemsNode.NodeType.master:
+                while self.listener.nodes.firstruns:
+                    time.sleep(0.5)
+
                 self.read_network_map()
                 self.check_network_map()
         
