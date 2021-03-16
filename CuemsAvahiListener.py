@@ -29,7 +29,6 @@ class CuemsAvahiListener():
 
     def remove_service(self, zeroconf, type_, name):
         self.logger.debug("Service %s removed" % (name,))
-        self.nodes[self.get_uuid(name)].present = False
         self.logger.debug(self.nodes)
         if self.callback:
             self.callback(action=CuemsAvahiListener.Action.DELETE)
@@ -37,7 +36,7 @@ class CuemsAvahiListener():
     def add_service(self, zeroconf, type_, name):
         info = zeroconf.get_service_info(type_, name)
         self.logger.debug(info)
-        node = CuemsNode({ 'uuid' : self.get_uuid(name), 'name' : self.get_host(name), 'node_type': CuemsNode.NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")] , 'ip' : info.parsed_addresses()[0], 'port': info.port, "present" : True})
+        node = CuemsNode({ 'uuid' : self.get_uuid(name), 'name' : self.get_host(name), 'node_type': CuemsNode.NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")] , 'ip' : info.parsed_addresses()[0], 'port': info.port})
         try:
             print("updating")
             print(f"nombre: {name}")

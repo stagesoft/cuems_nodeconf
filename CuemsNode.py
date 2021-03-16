@@ -43,7 +43,6 @@ class CuemsNode(dict):
 
 
     def __init__(self, *args, **kwargs):
-        self.present = False
         super().__init__(*args, **kwargs)
     
     @property
@@ -53,14 +52,6 @@ class CuemsNode(dict):
     @node_type.setter
     def node_type(self, value):
         return super().__setitem__('node_type', value)
-
-    @property
-    def present(self):
-        return super().__getitem__('present')
-    
-    @present.setter
-    def present(self, value):
-        return super().__setitem__('present', value)
 
     @property
     def name(self):
