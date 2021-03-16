@@ -63,6 +63,9 @@ class CuemsNodeConf():
             self.logger.debug("First time conf file detected, triying to autoconfigure node")
             self.set_node_type()
 
+            while self.listener.nodes.firstruns:
+                time.sleep(0.5)
+
             self.write_network_map()
         else:
             self.logger.debug("Allready configured, reading conf")
@@ -92,7 +95,7 @@ class CuemsNodeConf():
             # Copy master node service template
             source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.master'
             target = os.path.join('/etc/avahi/services/', CUEMS_SERVICE_FILE)
-            command = f'cp {source} {target}'
+            command = f'sudo cp {source} {target}'
             os.system(command)
             
         else:
@@ -102,7 +105,7 @@ class CuemsNodeConf():
             # Copy slave node service template
             source = os.path.join(CUEMS_CONF_PATH, CUEMS_SERVICE_FILE) + '.slave'
             target = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE)
-            os.system(f'cp {source} {target}')
+            os.system(f'sudo cp {source} {target}')
         
     def write_network_map(self, map=None):
         if not map:
