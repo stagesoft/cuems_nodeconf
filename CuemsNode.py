@@ -41,7 +41,6 @@ class CuemsNode(dict):
         def __repr__(self):
             return self.name
 
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     

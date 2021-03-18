@@ -1,6 +1,4 @@
-import socket
 import netifaces
-import threading
 import time
 import os.path
 from os import system
@@ -9,12 +7,8 @@ from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Ze
 
 import logging
 
-
-from .CuemsConfServer import CuemsConfServer
 from .CuemsAvahiListener import CuemsAvahiListener
 from .CuemsNode import CuemsNode, CuemsNodeDict
-
-from .CuemsSettings import read_conf
 
 from ..ConfigManager import ConfigManager
 from ..XmlReaderWriter import XmlReader, XmlWriter
@@ -25,22 +19,26 @@ MAP_FILE = 'network_map.xml'
 CUEMS_SERVICE_TEMPLATES_PATH = '/usr/share/cuems/'
 CUEMS_SERVICE_FILE = 'cuems.service'
 
+'''
 logging.basicConfig(level=logging.DEBUG,
                     format='%(name)s: %(message)s',
                     )
-
+'''
 
 class CuemsNodeConf():
+    def get_ip():
+        iface = netifaces.gateways()['default'][netifaces.AF_INET][1]
+        return netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
+
     nodes = CuemsNodeDict()
 
-    def __init__(self, settings_dict=read_conf()):
+    def __init__(self, ip=get_ip()):
 
         self.logger = logging.getLogger('Cuems-NodeConf')
-        self.init_done = False
 
         # Conf load manager
         try:
-            self.cm = ConfigManager(path=CUEMS_CONF_PATH)
+            self.cm = ConfigManager(path=CUEMS_CONF_PATH, nodeconf=True)
         except FileNotFoundError:
             self.logger.critical(
                 'Node config file could not be found. Exiting !!!!!')
@@ -51,48 +49,46 @@ class CuemsNodeConf():
 
         self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
 
-        self.settings_dict = settings_dict
-        self.services = [self.settings_dict['type_']]
+        self.ip = ip
+        self.services = ['_cuems_nodeconf._tcp.local.']
 
         self.start_avahi_listener()
         
-        # self.node = CuemsNode()
         self.node = self.retreive_local_node()
 
+        # Check for first run flag in service file
         if self.node.node_type == CuemsNode.NodeType.firstrun:
             self.logger.debug("First time conf file detected, triying to autoconfigure node")
             self.set_node_type()
-
-            while self.listener.nodes.firstruns:
-                time.sleep(0.5)
-
-            self.write_network_map()
         else:
-            self.logger.debug("Allready configured, reading conf")
-            
-            if self.node.node_type is CuemsNode.NodeType.master:
-                while self.listener.nodes.firstruns:
-                    time.sleep(0.5)
-
-                self.read_network_map()
-                self.check_network_map()
+            self.logger.debug(f"Allready configured as {self.node.node_type.name}")
         
-        
+        # If I am master finally wait a bit for slaves to appear on the net
+        if self.node.node_type == CuemsNode.NodeType.master:
+            time.sleep(self.cm.node_conf['nodeconf_timeout'] / 1000)
 
-        # time.sleep(2)
+        if self.listener.nodes.firstruns:
+            self.logger.debug('Waiting for some other "first-run" nodes')
+        while self.listener.nodes.firstruns:
+            time.sleep(0.5)
+
         self.check_nodes()
 
-        self.init_done = True
+        try:
+            self.write_network_map()
+        except Exception as e:
+            self.logger.exception(e)
 
     def start_avahi_listener(self):
-        self.listener = CuemsAvahiListener(callback=self.callback)
+        # self.listener = CuemsAvahiListener(callback=self.callback)
+        self.listener = CuemsAvahiListener()
         self.browser = ServiceBrowser(
             self.zeroconf, self.services, self.listener)
         time.sleep(2)
 
     def set_node_type(self):
         if not self.listener.nodes.masters:
-            self.logger.debug('No Master in network, WE ARE MASTER')
+            self.logger.debug('No master node on the network, I become MASTER!')
             self.node.node_type = CuemsNode.NodeType.master
 
             # Copy master node service template
@@ -100,10 +96,9 @@ class CuemsNodeConf():
             target = os.path.join('/etc/avahi/services/', CUEMS_SERVICE_FILE)
             command = f'sudo cp {source} {target}'
             os.system(command)
-            
         else:
+            self.logger.debug('Master present on the in network WE STAY SLAVE')
             self.node.node_type = CuemsNode.NodeType.slave
-            self.logger.debug('Master present in network WE STAY SLAVE')
 
             # Copy slave node service template
             source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.slave'
@@ -125,35 +120,11 @@ class CuemsNodeConf():
         for node in nodes:
             self.network_map[node.uuid] = node
         
+        print("---")
+        print("Nodes read from existing XML network map:")
         for item, value in self.network_map.items():
-            print("---")
-            print("nodes from xml:")
             print(value)
         print("---")
-
-    def check_network_map(self):
-        '''
-        for uuid, node in self.listener.nodes.items():
-            if uuid in self.network_map:
-                self.network_map[uuid].present = True
-            else:
-                print(f'node {uuid} is new, adding')
-                self.network_map[uuid] = node
-        keys_to_delete = list()
-
-        for uuid, node in self.network_map.items():
-            if uuid not in self.listener.nodes:
-                print(f'node {uuid} is missing!')
-                keys_to_delete.append(uuid)
-                     
-        if keys_to_delete:
-            for key in keys_to_delete:
-                del self.network_map[key]
-        '''
-        
-        self.write_network_map(self.network_map)
-        print(f' New network map: {self.network_map}')
-
 
     def cleanup(self):
         try:
@@ -163,56 +134,33 @@ class CuemsNodeConf():
 
     def callback(self, caller_node=None, action=CuemsAvahiListener.Action.ADD):
         self.logger.debug(f" {action} callback!!!, Node: {caller_node} ")
-        if not self.init_done:
-            self.logger.debug("INIT NOT DONE")
-            return None
 
         self.check_nodes()
 
     def check_nodes(self):
-        self.logger.debug(self.listener.nodes)
+        # self.logger.debug(self.listener.nodes)
         if self.listener.nodes.masters:
-            self.logger.debug(f"master: {self.listener.nodes.masters}")
+            self.logger.debug(f"Master node(s):\n{self.listener.nodes.masters}")
         else:
             raise Exception("we have no master!!")
         if self.listener.nodes.slaves:
             self.logger.debug(
-                f"we have {len(self.listener.nodes.slaves)} slaves")
-            self.logger.debug(f"slaves: {self.listener.nodes.slaves}")
+                f"We have {len(self.listener.nodes.slaves)} slaves")
+            self.logger.debug(f"Slave node(s):\n{self.listener.nodes.slaves}")
         else:
             self.logger.debug("we have no slaves")
 
-    def register_node(self):
-
-        self.service_info = ServiceInfo(
-            self.settings_dict['type_'],
-            self.settings_dict['name'],
-            addresses=[self.settings_dict['ip']],
-            port=self.settings_dict['port'],
-            properties={'node_type': self.node.node_type.name},
-            server=self.settings_dict['server'],
-            host_ttl=self.settings_dict['host_ttl'],
-            other_ttl=self.settings_dict['other_ttl'],
-
-        )
-        self.logger.debug(f"registering node as {self.node.node_type.name.upper()}")
-        self.zeroconf.register_service(self.service_info)
-        self.logger.debug("Node registered")
-
     def check_first_run(self):
         for node in self.listener.nodes.firstruns:
-            if node.ip == self.settings_dict['ip']:
+            if node.ip == self.ip:
                 return True
 
         return False
     
     def retreive_local_node(self):
         for node in self.listener.nodes.values():
-            if node.ip == self.settings_dict['ip']:
+            if node.ip == self.ip:
                 return node
         
         raise Exception('Local node avahi service not detected')
 
-    def shutdown(self):
-        self.zeroconf.unregister_service(self.service_info)
-        self.zeroconf.close()

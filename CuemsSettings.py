@@ -17,7 +17,6 @@ def read_conf():
     settings_dict = dict()
     settings_dict['ip'] = get_ip()
     settings_dict['uuid'] = mac
-    #settings_dict['uuid'] = str(uuid.uuid4())
     settings_dict['hostname'] = socket.gethostname()
     settings_dict['server'] = f"{settings_dict['hostname']}.local."
     settings_dict['type_'] = "_cuems_nodeconf._tcp.local."
