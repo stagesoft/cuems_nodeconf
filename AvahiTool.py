@@ -32,6 +32,8 @@ class MyAvahiListener():
         except KeyError:
             pass
 
+        self.print_node_info(info)
+
         if self.callback:
             self.callback(action=MyAvahiListener.Action.DELETE)
 
