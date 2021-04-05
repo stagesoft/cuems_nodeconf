@@ -32,7 +32,7 @@ class MyAvahiListener():
         except KeyError:
             pass
 
-        self.print_node_info(info)
+        self.print_current_present_nodes()
 
         if self.callback:
             self.callback(action=MyAvahiListener.Action.DELETE)
@@ -64,10 +64,16 @@ class MyAvahiListener():
         print(f'Node type: {NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")]}')
         print(f'IP: {info.parsed_addresses()[0]}')
         print(f'Port: {info.port}')
+
+        self.print_current_present_nodes()
+
+    def print_current_present_nodes(self):
         print('________________________________________________________________________')
         print(f'CURRENT PRESENT NODES:')
         for key, value in self.services.items():
             print(f'{value.parsed_addresses()[0]} - {NodeType[value.properties[list(value.properties.keys())[0]].decode("utf-8")]}')
+
+
 
 
 class AvahiTool():
