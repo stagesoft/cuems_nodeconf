@@ -17,7 +17,8 @@
     <xs:complexType name="NodeType">
         <xs:sequence>
             <!-- <xs:element name="present" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/> -->
-            <xs:element name="uuid" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
+            <xs:element name="uuid" minOccurs="1" maxOccurs="1" type="xs:string"/>
+            <xs:element name="mac" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="name" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="node_type" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="ip" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>

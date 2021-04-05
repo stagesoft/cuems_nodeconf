@@ -84,6 +84,14 @@ class CuemsNode(dict):
     def uuid(self, value):
         return super().__setitem__('uuid', value)
 
+    @property
+    def mac(self):
+        return super().__getitem__('mac')
+
+    @mac.setter
+    def mac(self, value):
+        return super().__setitem__('mac', value)
+
     # def __repr__(self):
     #     _dict = str({"name" : super().__getitem__('name'), "present" : super().__getitem__('present')})
     #     return _dict

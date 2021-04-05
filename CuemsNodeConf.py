@@ -118,7 +118,7 @@ class CuemsNodeConf():
         self.network_map = CuemsNodeDict()
         nodes = reader.read_to_objects()
         for node in nodes:
-            self.network_map[node.uuid] = node
+            self.network_map[node.mac] = node
         
         print("---")
         print("Nodes read from existing XML network map:")
