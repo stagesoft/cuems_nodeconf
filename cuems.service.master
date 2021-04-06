@@ -10,6 +10,7 @@
     <type>_cuems_nodeconf._tcp</type>
     <port>9000</port>
     <txt-record>node_type=master</txt-record>
+    <txt-record>uuid=0367f391-ebf4-48b2-9f26-000000000001</txt-record>
   </service>
 
 </service-group>
