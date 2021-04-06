@@ -32,7 +32,7 @@ class CuemsAvahiListener():
     def add_service(self, zeroconf, type_, name):
         info = zeroconf.get_service_info(type_, name)
         self.logger.debug(info)
-        node = CuemsNode({ 'uuid' : '', 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")] , 'ip' : info.parsed_addresses()[0], 'port': info.port})
+        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")] , 'ip' : info.parsed_addresses()[0], 'port': info.port})
         try:
             self.nodes[self.get_mac(name)].update(node)
         except KeyError:

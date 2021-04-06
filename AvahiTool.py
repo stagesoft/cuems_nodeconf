@@ -60,7 +60,8 @@ class MyAvahiListener():
             self.callback(node, action=MyAvahiListener.Action.UPDATE)
 
     def print_node_info(self, info):
-        print(f'UUID: {info.name[:12]}')
+        print(f'UUID: {info.properties[b"uuid"].decode("utf8")}')
+        print(f'MAC: {info.name[:12]}')
         print(f'Node type: {NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")]}')
         print(f'IP: {info.parsed_addresses()[0]}')
         print(f'Port: {info.port}')
