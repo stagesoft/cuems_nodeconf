@@ -3,7 +3,7 @@ import enum
 
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
 
-SERVICES = ['_cuems_nodeconf._tcp.local.']
+SERVICES = ['_cuems_nodeconf._tcp.local.', '_cuems_osc._tcp.local.']
 
 
 class NodeType(enum.Enum):
@@ -60,19 +60,27 @@ class MyAvahiListener():
             self.callback(node, action=MyAvahiListener.Action.UPDATE)
 
     def print_node_info(self, info):
+        print(f'SERVICE: {info.type}')
         print(f'UUID: {info.properties[b"uuid"].decode("utf8")}')
         print(f'MAC: {info.name[:12]}')
         print(f'Node type: {NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")]}')
         print(f'IP: {info.parsed_addresses()[0]}')
         print(f'Port: {info.port}')
+        print(f'Whole info: {info}')
 
         self.print_current_present_nodes()
 
     def print_current_present_nodes(self):
         print('________________________________________________________________________')
-        print(f'CURRENT PRESENT NODES:')
+        print(f'CURRENT PRESENT NODECONF NODES:')
         for key, value in self.services.items():
-            print(f'{value.parsed_addresses()[0]} - {NodeType[value.properties[list(value.properties.keys())[0]].decode("utf-8")]}')
+            if value.type == '_cuems_nodeconf._tcp.local.':
+                print(f'{value.parsed_addresses()[0]} : {value.port} - {NodeType[value.properties[list(value.properties.keys())[0]].decode("utf-8")]}')
+        print(f'\nCURRENT PRESENT OSC NODES:')
+        for key, value in self.services.items():
+            if value.type == '_cuems_osc._tcp.local.':
+                print(f'{value.parsed_addresses()[0]}  : {value.port} - {NodeType[value.properties[list(value.properties.keys())[0]].decode("utf-8")]}')
+        
 
 
 
