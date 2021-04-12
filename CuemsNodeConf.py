@@ -2,6 +2,7 @@ import netifaces
 import time
 import os.path
 from os import system
+import subprocess
 
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
 
@@ -66,6 +67,9 @@ class CuemsNodeConf():
         # If I am master finally wait a bit for slaves to appear on the net
         if self.node.node_type == CuemsNode.NodeType.master:
             time.sleep(self.cm.node_conf['nodeconf_timeout'] / 1000)
+            
+            # publish avahi alias as master.local
+            self.publish_master_alias()
 
         if self.listener.nodes.firstruns:
             self.logger.debug('Waiting for some other "first-run" nodes')
@@ -90,6 +94,7 @@ class CuemsNodeConf():
         if not self.listener.nodes.masters:
             self.logger.debug('No master node on the network, I become MASTER!')
             self.node.node_type = CuemsNode.NodeType.master
+            
 
             # Copy master node service template
             source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.master'
@@ -163,4 +168,13 @@ class CuemsNodeConf():
                 return node
         
         raise Exception('Local node avahi service not detected')
+
+    def publish_master_alias(self):
+        #avahi-publish -a -f -R master.local 192.168.1.12
+        try:
+            subprocess.Popen(["avahi-publish", "-aR", "master.local", self.ip], close_fds=True)
+            self.logger.debug(f"Publishing master.local alias in  {self.ip}")
+        except Exception as e:
+            self.logger.debug(f"error publishing alias, {type(e)}. {e}")
+
 
