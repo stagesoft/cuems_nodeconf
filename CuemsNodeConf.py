@@ -2,6 +2,7 @@ import netifaces
 import time
 import os.path
 from os import system
+import sys
 import subprocess
 
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
@@ -84,9 +85,9 @@ class CuemsNodeConf():
             self.logger.exception(e)
 
         if self.node.node_type == CuemsNode.NodeType.master:
-            exit('MASTER')
+            sys.exit(100)
         elif self.node.node_type == CuemsNode.NodeType.slave:
-            exit('SLAVE')
+            sys.exit(101)
 
     def start_avahi_listener(self):
         # self.listener = CuemsAvahiListener(callback=self.callback)
@@ -167,9 +168,16 @@ class CuemsNodeConf():
         return False
     
     def retreive_local_node(self):
-        for node in self.listener.nodes.values():
-            if node.ip == self.ip:
-                return node
+        retries = 0
+        
+        while retries < 3:
+            for node in self.listener.nodes.values():
+                if node.ip == self.ip:
+                    found = True
+                    return node
+
+            time.sleep(0.5)
+            retries += 1
         
         raise Exception('Local node avahi service not detected')
 
