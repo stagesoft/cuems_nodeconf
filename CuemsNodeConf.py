@@ -83,6 +83,11 @@ class CuemsNodeConf():
         except Exception as e:
             self.logger.exception(e)
 
+        if self.node.node_type == CuemsNode.NodeType.master:
+            exit('MASTER')
+        elif self.node.node_type == CuemsNode.NodeType.slave:
+            exit('SLAVE')
+
     def start_avahi_listener(self):
         # self.listener = CuemsAvahiListener(callback=self.callback)
         self.listener = CuemsAvahiListener()
@@ -94,7 +99,6 @@ class CuemsNodeConf():
         if not self.listener.nodes.masters:
             self.logger.debug('No master node on the network, I become MASTER!')
             self.node.node_type = CuemsNode.NodeType.master
-            
 
             # Copy master node service template
             source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.master'
