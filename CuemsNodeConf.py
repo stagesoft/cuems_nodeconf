@@ -55,7 +55,6 @@ class CuemsNodeConf():
         self.services = ['_cuems_nodeconf._tcp.local.']
 
         self.start_avahi_listener()
-        
         self.node = self.retreive_local_node()
 
         # Check for first run flag in service file
@@ -94,7 +93,7 @@ class CuemsNodeConf():
         self.listener = CuemsAvahiListener()
         self.browser = ServiceBrowser(
             self.zeroconf, self.services, self.listener)
-        time.sleep(2)
+        time.sleep(4)
 
     def set_node_type(self):
         if not self.listener.nodes.masters:
@@ -170,11 +169,15 @@ class CuemsNodeConf():
     def retreive_local_node(self):
         retries = 0
         
-        while retries < 3:
+        while retries < 13:
+            print(f' nodes list: {self.listener.nodes}')
             for node in self.listener.nodes.values():
-                if node.ip == self.ip:
-                    found = True
-                    return node
+                for iface_ip in node.ip:
+                    print(iface_ip)
+                    print(self.ip)
+                    if iface_ip == self.ip:
+                        found = True
+                        return node
 
             time.sleep(0.5)
             retries += 1

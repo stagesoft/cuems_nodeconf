@@ -1,6 +1,7 @@
 from .CuemsNode import CuemsNodeDict, CuemsNode
 import enum
 import logging
+from zeroconf import IPVersion
 
 
 logging.basicConfig(level=logging.DEBUG,
@@ -32,9 +33,18 @@ class CuemsAvahiListener():
     def add_service(self, zeroconf, type_, name):
         info = zeroconf.get_service_info(type_, name)
         self.logger.debug(info)
-        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")] , 'ip' : info.parsed_addresses()[0], 'port': info.port})
+        iface_adresses = info.parsed_addresses(version = IPVersion.V4Only)[0]
+        print("------------------INFO ADD---------------")
+        print(iface_adresses)
+        print(type(iface_adresses))
+        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")] , 'ip' : [iface_adresses], 'port': info.port})
         try:
-            self.nodes[self.get_mac(name)].update(node)
+            self.nodes[self.get_mac(name)]['uuid'] = info.properties[b"uuid"].decode("utf-8")
+            self.nodes[self.get_mac(name)]['mac'] = self.get_mac(name)
+            self.nodes[self.get_mac(name)]['name'] = name
+            self.nodes[self.get_mac(name)]['node_type'] = CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")]
+            self.nodes[self.get_mac(name)]['ip'].append(iface_adresses)
+            self.nodes[self.get_mac(name)]['port'] = info.port
         except KeyError:
             self.nodes[self.get_mac(name)] = node
         
@@ -45,8 +55,16 @@ class CuemsAvahiListener():
 
     def update_service(self, zeroconf, type_, name):
         info = zeroconf.get_service_info(type_, name)
-        node = CuemsNode({ 'uuid' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")], 'ip' : info.parsed_addresses()[0], 'port': info.port})
-        self.nodes[self.get_mac(name)].update(node)
+        iface_adresses = info.parsed_addresses(version = IPVersion.V4Only)[0]
+        print("------------------INFO UPDATE--------------")
+        print(iface_adresses)
+        print(type(iface_adresses))
+        self.nodes[self.get_mac(name)]['uuid'] = info.properties[b"uuid"].decode("utf-8")
+        self.nodes[self.get_mac(name)]['mac'] = self.get_mac(name)
+        self.nodes[self.get_mac(name)]['name'] = name
+        self.nodes[self.get_mac(name)]['node_type'] = CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")]
+        self.nodes[self.get_mac(name)]['ip'].append(iface_adresses)
+        self.nodes[self.get_mac(name)]['port'] = info.port
         self.logger.debug(f'Service {name} updated, service info: {info}')
 
         if self.callback:
