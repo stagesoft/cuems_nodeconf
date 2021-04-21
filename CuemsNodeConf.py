@@ -20,6 +20,7 @@ MAP_SCHEMA_FILE = 'network_map.xsd'
 MAP_FILE = 'network_map.xml'
 CUEMS_SERVICE_TEMPLATES_PATH = '/usr/share/cuems/'
 CUEMS_SERVICE_FILE = 'cuems.service'
+CUEMS_MASTER_LOCK_FILE = 'master.lock'
 
 '''
 logging.basicConfig(level=logging.DEBUG,
@@ -83,6 +84,8 @@ class CuemsNodeConf():
             self.write_network_map()
         except Exception as e:
             self.logger.exception(e)
+
+        self.update_master_lock_file(os.path.join( CUEMS_CONF_PATH, CUEMS_MASTER_LOCK_FILE))
 
         if self.node.node_type == CuemsNode.NodeType.master:
             sys.exit(100)
@@ -188,5 +191,24 @@ class CuemsNodeConf():
             self.logger.debug(f"Publishing master.local alias in  {self.ip}")
         except Exception as e:
             self.logger.debug(f"error publishing alias, {type(e)}. {e}")
+
+    def update_master_lock_file(self, path):
+        if self.node.node_type == CuemsNode.NodeType.master:
+            print("master")
+            if  not os.path.isfile(path):
+                print("not file")
+                try:
+                    with open(path, 'a') as results_file:
+                        results_file.write('\n')
+                except:
+                    self.logger.warning("could not write master lock file")
+        else:
+            if os.path.isfile(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    self.logger.warning("could not delete master lock file")
+
+            
 
 
