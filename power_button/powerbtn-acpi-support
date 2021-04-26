@@ -1,2 +1,2 @@
 event=button[ /]power
-action=/etc/acpi/powerbtn-acpi-support.sh
+action=/etc/acpi/powerbtn-custom-handler.sh

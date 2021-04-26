@@ -1,5 +1,8 @@
+apt-get install acpid
+
 /etc/systemd/logind.conf to disable the power button:
 
 HandlePowerKey=ignore
 
 /etc/acpi/events/powerbtn-acpi-support
+cp scripts to /etc/acpi
