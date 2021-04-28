@@ -30,7 +30,7 @@ logging.basicConfig(level=logging.DEBUG,
 
 class CuemsNodeConf():
     def get_ip():
-        return netifaces.ifaddresses('ethernet0:avahi')[netifaces.AF_INET][0]['addr']
+        return netifaces.ifaddresses('ethernet0')[netifaces.AF_INET][0]['addr']
 
     nodes = CuemsNodeDict()
 
