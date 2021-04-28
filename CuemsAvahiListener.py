@@ -45,7 +45,7 @@ class CuemsAvahiListener():
 
     def update_service(self, zeroconf, type_, name):
         info = zeroconf.get_service_info(type_, name)
-        node = CuemsNode({ 'uuid' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")], 'ip' : info.parsed_addresses()[0], 'port': info.port})
+        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")], 'ip' : info.parsed_addresses()[0], 'port': info.port})
         self.nodes[self.get_mac(name)].update(node)
         self.logger.debug(f'Service {name} updated, service info: {info}')
 
