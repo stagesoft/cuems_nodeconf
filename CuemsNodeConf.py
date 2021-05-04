@@ -154,7 +154,7 @@ class CuemsNodeConf():
         if self.listener.nodes.masters:
             self.logger.debug(f"Master node(s):\n{self.listener.nodes.masters}")
         else:
-            raise Exception("we have no master!!")
+            self.logger.debug(f"We have no MASTER!! yet? waiting for it")
         if self.listener.nodes.slaves:
             self.logger.debug(
                 f"We have {len(self.listener.nodes.slaves)} slaves")
