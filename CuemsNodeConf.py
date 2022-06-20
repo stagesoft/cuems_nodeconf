@@ -171,14 +171,17 @@ class CuemsNodeConf():
     
     def retreive_local_node(self):
         retries = 0
+        sleep_time = 1.5
         
-        while retries < 3:
+        while retries < 6:
             for node in self.listener.nodes.values():
                 if node.ip == self.ip:
                     found = True
                     return node
 
-            time.sleep(0.5)
+            time.sleep(sleep_time)
+            sleep_time = sleep_time * 2
+            self.logger.debug("waiting for local node to appear on the network")
             retries += 1
         
         raise Exception('Local node avahi service not detected')
