@@ -5,11 +5,11 @@ from os import system
 import sys
 import subprocess
 
-from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
+# from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
 
 import logging
 
-from .CuemsAvahiListener import CuemsAvahiListener
+# from .CuemsAvahiListener import CuemsAvahiListener
 from .CuemsNode import CuemsNode, CuemsNodeDict
 
 from ..ConfigManager import ConfigManager
@@ -21,6 +21,7 @@ MAP_FILE = 'network_map.xml'
 CUEMS_SERVICE_TEMPLATES_PATH = '/usr/share/cuems/'
 CUEMS_SERVICE_FILE = 'cuems.service'
 CUEMS_MASTER_LOCK_FILE = 'master.lock'
+CUEMS_MASTER_IP_FILE = 'master.ip'
 
 '''
 logging.basicConfig(level=logging.DEBUG,
@@ -29,12 +30,12 @@ logging.basicConfig(level=logging.DEBUG,
 '''
 
 class CuemsNodeConf():
-    def get_ip():
+    def get_ip(self):
         return netifaces.ifaddresses('ethernet0')[netifaces.AF_INET][0]['addr']
 
-    nodes = CuemsNodeDict()
+    # nodes = CuemsNodeDict()
 
-    def __init__(self, ip=get_ip()):
+    def __init__(self):
 
         self.logger = logging.getLogger('Cuems-NodeConf')
 
@@ -46,25 +47,45 @@ class CuemsNodeConf():
                 'Node config file could not be found. Exiting !!!!!')
             exit(-1)
 
+        '''
         self.xsd_path = os.path.join( CUEMS_CONF_PATH, MAP_SCHEMA_FILE)
         self.map_path = os.path.join( CUEMS_CONF_PATH, MAP_FILE)
 
         self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
 
-        self.ip = ip
         self.services = ['_cuems_nodeconf._tcp.local.']
 
         self.start_avahi_listener()
         
         self.node = self.retreive_local_node()
+        '''
+
+        self.node = CuemsNode()
+
+        ip_path = os.path.join(CUEMS_CONF_PATH, CUEMS_MASTER_IP_FILE)
+        try:
+            with open(ip_path, 'r') as ip_file:
+                ip = ip_file.readline().strip()
+        except FileNotFoundError:
+            self.logger.critical(f'Master node IP file {ip_path} not found.')
+            exit(-1)
+
+        if os.path.exists(os.path.join(CUEMS_CONF_PATH, CUEMS_MASTER_LOCK_FILE)):
+            self.node.node_type = CuemsNode.NodeType.master
+            self.ip = ip
+            self.logger.debug(f'Master mode, local IP : {self.ip}')
+        else:
+            self.node.node_type = CuemsNode.NodeType.slave
+            self.logger.debug(f'Slave mode, master IP : {ip}')
 
         # Check for first run flag in service file
         if self.node.node_type == CuemsNode.NodeType.firstrun:
             self.logger.debug("First time conf file detected, triying to autoconfigure node")
             self.set_node_type()
         else:
-            self.logger.debug(f"Allready configured as {self.node.node_type.name}")
+            self.logger.debug(f"Configured as {self.node.node_type.name}")
         
+        '''
         # If I am master finally wait a bit for slaves to appear on the net
         if self.node.node_type == CuemsNode.NodeType.master:
             time.sleep(self.cm.node_conf['nodeconf_timeout'] / 1000)
@@ -77,6 +98,7 @@ class CuemsNodeConf():
         while self.listener.nodes.firstruns:
             time.sleep(0.5)
 
+
         self.check_nodes()
 
         try:
@@ -85,6 +107,7 @@ class CuemsNodeConf():
             self.logger.exception(e)
 
         self.update_master_lock_file(os.path.join( CUEMS_CONF_PATH, CUEMS_MASTER_LOCK_FILE))
+        '''
 
         if self.node.node_type == CuemsNode.NodeType.master:
             sys.exit(100)
@@ -144,6 +167,7 @@ class CuemsNodeConf():
         except FileNotFoundError:
             pass
 
+    '''
     def callback(self, caller_node=None, action=CuemsAvahiListener.Action.ADD):
         self.logger.debug(f" {action} callback!!!, Node: {caller_node} ")
 
@@ -210,7 +234,7 @@ class CuemsNodeConf():
                     os.remove(path)
                 except OSError:
                     self.logger.warning("could not delete master lock file")
-
+    '''
             
 
 
