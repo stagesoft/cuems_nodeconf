@@ -22,6 +22,9 @@ CUEMS_SERVICE_TEMPLATES_PATH = '/usr/share/cuems/'
 CUEMS_SERVICE_FILE = 'cuems.service'
 CUEMS_MASTER_LOCK_FILE = 'master.lock'
 
+MASTER_ALIAS='master.local'
+WIFI_ALIAS='formitgo.local'
+
 '''
 logging.basicConfig(level=logging.DEBUG,
                     format='%(name)s: %(message)s',
@@ -31,10 +34,13 @@ logging.basicConfig(level=logging.DEBUG,
 class CuemsNodeConf():
     def get_ip():
         return netifaces.ifaddresses('ethernet0:avahi')[netifaces.AF_INET][0]['addr']
+    
+    def get_wifi_ip():
+        return netifaces.ifaddresses('wifi0')[netifaces.AF_INET][0]['addr']
 
     nodes = CuemsNodeDict()
 
-    def __init__(self, ip=get_ip()):
+    def __init__(self, ip=get_ip(), wifi_ip=get_wifi_ip()):
 
         self.logger = logging.getLogger('Cuems-NodeConf')
 
@@ -52,6 +58,7 @@ class CuemsNodeConf():
         self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
 
         self.ip = ip
+        self.wifi_ip = wifi_ip
         self.services = ['_cuems_nodeconf._tcp.local.']
 
         self.start_avahi_listener()
@@ -69,8 +76,11 @@ class CuemsNodeConf():
         if self.node.node_type == CuemsNode.NodeType.master:
             time.sleep(self.cm.node_conf['nodeconf_timeout'] / 1000)
             
-            # publish avahi alias as master.local
+            # publish avahi alias as in internal interface 0
             self.publish_master_alias()
+
+            # publish wifi alias as in wifi interface
+            self.publish_wifi_alias()
 
         if self.listener.nodes.firstruns:
             self.logger.debug('Waiting for some other "first-run" nodes')
@@ -123,6 +133,7 @@ class CuemsNodeConf():
 
         writer = XmlWriter(schema = self.xsd_path, xmlfile = self.map_path, xml_root_tag='CuemsNetworkMap')
         writer.write_from_object(map)
+        self.logger.debug("Network map written to XML")
 
 
     def read_network_map(self):
@@ -172,7 +183,6 @@ class CuemsNodeConf():
     def retreive_local_node(self):
         retries = 0
         sleep_time = 1.5
-        
         while retries < 6:
             for node in self.listener.nodes.values():
                 if node.ip == self.ip:
@@ -187,30 +197,32 @@ class CuemsNodeConf():
         raise Exception('Local node avahi service not detected')
 
     def publish_master_alias(self):
-        #avahi-publish -a -f -R master.local 192.168.1.12
         try:
-            subprocess.Popen(["avahi-publish", "-aR", "master.local", self.ip], close_fds=True)
-            self.logger.debug(f"Publishing master.local alias in  {self.ip}")
+            subprocess.Popen(["avahi-publish", "-aR", MASTER_ALIAS, self.ip], close_fds=True)
+            self.logger.debug(f"Publishing {MASTER_ALIAS} alias in  {self.ip}")
+        except Exception as e:
+            self.logger.debug(f"error publishing alias, {type(e)}. {e}")
+
+    def publish_wifi_alias(self):
+        try:
+            subprocess.Popen(["avahi-publish", "-aR", WIFI_ALIAS, self.wifi_ip], close_fds=True)
+            self.logger.debug(f"Publishing {WIFI_ALIAS} alias in  {self.wifi_ip}")
         except Exception as e:
             self.logger.debug(f"error publishing alias, {type(e)}. {e}")
 
     def update_master_lock_file(self, path):
         if self.node.node_type == CuemsNode.NodeType.master:
-            print("master")
             if  not os.path.isfile(path):
-                print("not file")
                 try:
                     with open(path, 'a') as results_file:
                         results_file.write('\n')
+                    self.logger.debug("Created new master file")
                 except:
                     self.logger.warning("could not write master lock file")
         else:
             if os.path.isfile(path):
                 try:
                     os.remove(path)
+                    self.logger.debug("Removed master file")
                 except OSError:
                     self.logger.warning("could not delete master lock file")
-
-            
-
-
