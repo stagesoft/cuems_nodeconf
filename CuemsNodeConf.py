@@ -33,7 +33,12 @@ logging.basicConfig(level=logging.DEBUG,
 
 class CuemsNodeConf():
     def get_ip():
-        return netifaces.ifaddresses('ethernet0:avahi')[netifaces.AF_INET][0]['addr']
+        while True:
+            try:
+                return netifaces.ifaddresses('ethernet0:avahi')[netifaces.AF_INET][0]['addr']
+            except ValueError:
+                pass
+        time.sleep(1)
     
     def get_wifi_ip():
         return netifaces.ifaddresses('wifi0')[netifaces.AF_INET][0]['addr']
