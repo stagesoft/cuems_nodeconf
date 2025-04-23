@@ -42,12 +42,11 @@ class CuemsNodeConf():
         time.sleep(1)
     
     def get_wifi_ip():
-        while True:
             try:
                 return netifaces.ifaddresses('wifi0')[netifaces.AF_INET][0]['addr']
             except ValueError:
                 logging.debug("Waiting for wifi0:avahi interface to appear")
-        time.sleep(1)
+                return None
 
 
     nodes = CuemsNodeDict()
