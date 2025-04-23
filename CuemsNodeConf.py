@@ -4,10 +4,12 @@ import os.path
 from os import system
 import sys
 import subprocess
+import systemd.daemon
 
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
 
 import logging
+
 
 from .CuemsAvahiListener import CuemsAvahiListener
 from .CuemsNode import CuemsNode, CuemsNodeDict
@@ -35,6 +37,10 @@ class CuemsNodeConf():
      #TODO: add timeout for the waiting loops
     def get_ip():
         while True:
+            try:
+                return netifaces.ifaddresses('ethernet0:avahi')[netifaces.AF_INET][0]['addr']
+            except ValueError:
+                logging.debug("Waiting for ethernet0:avahi interface to appear")
             try:
                 return netifaces.ifaddresses('ethernet0:avahi')[netifaces.AF_INET][0]['addr']
             except ValueError:
@@ -106,11 +112,16 @@ class CuemsNodeConf():
             self.logger.exception(e)
 
         self.update_master_lock_file(os.path.join( CUEMS_CONF_PATH, CUEMS_MASTER_LOCK_FILE))
+        # Check if I am the master node
 
-        if self.node.node_type == CuemsNode.NodeType.master:
-            sys.exit(100)
-        elif self.node.node_type == CuemsNode.NodeType.slave:
-            sys.exit(101)
+
+        # if self.node.node_type == CuemsNode.NodeType.master:
+        #     sys.exit(100)
+        # elif self.node.node_type == CuemsNode.NodeType.slave:
+        #     sys.exit(101)
+
+        self.logger.debug('Startup complete, notifying systemd')
+        systemd.daemon.notify('READY=1')
 
     def start_avahi_listener(self):
         # self.listener = CuemsAvahiListener(callback=self.callback)
