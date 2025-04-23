@@ -22,7 +22,7 @@ CUEMS_SERVICE_TEMPLATES_PATH = '/usr/share/cuems/'
 CUEMS_SERVICE_FILE = 'cuems.service'
 CUEMS_MASTER_LOCK_FILE = 'master.lock'
 
-MASTER_ALIAS='master.local'
+MASTER_ALIAS='controller.local'
 WIFI_ALIAS='formitgo.local'
 
 '''
@@ -32,16 +32,23 @@ logging.basicConfig(level=logging.DEBUG,
 '''
 
 class CuemsNodeConf():
+     #TODO: add timeout for the waiting loops
     def get_ip():
         while True:
             try:
                 return netifaces.ifaddresses('ethernet0:avahi')[netifaces.AF_INET][0]['addr']
             except ValueError:
-                pass
+                logging.debug("Waiting for ethernet0:avahi interface to appear")
         time.sleep(1)
     
     def get_wifi_ip():
-        return netifaces.ifaddresses('wifi0')[netifaces.AF_INET][0]['addr']
+        while True:
+            try:
+                return netifaces.ifaddresses('wifi0')[netifaces.AF_INET][0]['addr']
+            except ValueError:
+                logging.debug("Waiting for wifi0:avahi interface to appear")
+        time.sleep(1)
+
 
     nodes = CuemsNodeDict()
 
