@@ -34,30 +34,10 @@ logging.basicConfig(level=logging.DEBUG,
 '''
 
 class CuemsNodeConf():
-     #TODO: add timeout for the waiting loops
-    def get_ip():
-        while True:
-            try:
-                return netifaces.ifaddresses('ethernet0:avahi')[netifaces.AF_INET][0]['addr']
-            except ValueError:
-                logging.debug("Waiting for ethernet0:avahi interface to appear")
-            try:
-                return netifaces.ifaddresses('ethernet0:avahi')[netifaces.AF_INET][0]['addr']
-            except ValueError:
-                logging.debug("Waiting for ethernet0:avahi interface to appear")
-        time.sleep(1)
-    
-    def get_wifi_ip():
-            try:
-                return netifaces.ifaddresses('wifi0')[netifaces.AF_INET][0]['addr']
-            except ValueError:
-                logging.debug("Waiting for wifi0:avahi interface to appear")
-                return None
-
 
     nodes = CuemsNodeDict()
 
-    def __init__(self, ip=get_ip(), wifi_ip=get_wifi_ip()):
+    def __init__(self):
 
         self.logger = logging.getLogger('Cuems-NodeConf')
 
@@ -74,8 +54,9 @@ class CuemsNodeConf():
 
         self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
 
-        self.ip = ip
-        self.wifi_ip = wifi_ip
+        self.get_ips()
+        
+
         self.services = ['_cuems_nodeconf._tcp.local.']
 
         self.start_avahi_listener()
@@ -122,6 +103,35 @@ class CuemsNodeConf():
 
         self.logger.debug('Startup complete, notifying systemd')
         systemd.daemon.notify('READY=1')
+
+         #TODO: add timeout for the waiting loops
+    def get_ips(self):
+        self.ip = None
+        self.controller_ip = None
+        while True:
+            try:
+                self.ip = netifaces.ifaddresses('bridge0:avahi')[netifaces.AF_INET][0]['addr']
+                self_controller_ip = None
+                logging.debug(f"Found bridge0:avahi interface, IP: {self.ip}")
+                return 
+            except ValueError:
+                logging.debug("bridge0:avahi interface not found, triying next ones")
+                try:
+                    self.ip = netifaces.ifaddresses('ethernet1:avahi')[netifaces.AF_INET][0]['addr']
+                    logging.debug(f"Found ethernet1:avahi interface, IP: {self.ip}")
+                except ValueError:
+                    logging.debug("Waiting for ethernet1:avahi interface to appear")
+    
+                try:
+                    self.controller_ip = netifaces.ifaddresses('bond0')[netifaces.AF_INET][0]['addr']
+                    if self.ip != None:
+                        (f"Found bond0 interface, CONTROLLER IP: {self.controller_ip}")
+                        return
+                    else:
+                        logging.debug(f"Found bond0 interface, but we are mising ethernet1:avahi interface, continuing")
+                except ValueError:
+                    logging.debug("Waiting for bond0 interface to appear")
+            time.sleep(1)
 
     def start_avahi_listener(self):
         # self.listener = CuemsAvahiListener(callback=self.callback)
