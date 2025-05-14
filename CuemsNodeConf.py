@@ -11,11 +11,10 @@ from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Ze
 import logging
 
 
-from .CuemsAvahiListener import CuemsAvahiListener
-from .CuemsNode import CuemsNode, CuemsNodeDict
+from CuemsAvahiListener import CuemsAvahiListener
+from CuemsNode import CuemsNode, CuemsNodeDict
 
-from ..ConfigManager import ConfigManager
-from ..XmlReaderWriter import XmlReader, XmlWriter
+from cuemsutils.xml.XmlReaderWriter import XmlReader, XmlWriter
 
 CUEMS_CONF_PATH = '/etc/cuems/'
 MAP_SCHEMA_FILE = 'network_map.xsd'
@@ -42,12 +41,14 @@ class CuemsNodeConf():
         self.logger = logging.getLogger('Cuems-NodeConf')
 
         # Conf load manager
-        try:
-            self.cm = ConfigManager(path=CUEMS_CONF_PATH, nodeconf=True)
-        except FileNotFoundError:
-            self.logger.critical(
-                'Node config file could not be found. Exiting !!!!!')
-            exit(-1)
+        # disable temporally until we got nodeconf again
+        # try:
+        #     self.cm = ConfigManager(path=CUEMS_CONF_PATH, nodeconf=True)
+        # except FileNotFoundError:
+        #     self.logger.critical(
+        #         'Node config file could not be found. Exiting !!!!!')
+          
+        #     exit(-1)
 
         self.xsd_path = os.path.join( CUEMS_CONF_PATH, MAP_SCHEMA_FILE)
         self.map_path = os.path.join( CUEMS_CONF_PATH, MAP_FILE)
@@ -72,7 +73,9 @@ class CuemsNodeConf():
         
         # If I am master finally wait a bit for slaves to appear on the net
         if self.node.node_type == CuemsNode.NodeType.master:
-            time.sleep(self.cm.node_conf['nodeconf_timeout'] / 1000)
+            #time.sleep(self.cm.node_conf['nodeconf_timeout'] / 1000)
+            #temp until we got nodeconf again
+            time.sleep(5)
             
             # publish avahi alias as in internal interface 0
             self.publish_master_alias()
@@ -258,3 +261,9 @@ class CuemsNodeConf():
                     self.logger.debug("Removed master file")
                 except OSError:
                     self.logger.warning("could not delete master lock file")
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(name)s: %(message)s',
+                        )
+    CuemsNodeConf()
