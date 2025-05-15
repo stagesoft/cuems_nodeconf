@@ -81,7 +81,8 @@ class CuemsNodeConf():
             self.publish_master_alias()
 
             # publish wifi alias as in wifi interface
-            self.publish_wifi_alias()
+            if self.controller_ip:
+                self.publish_controller_alias()
 
         if self.listener.nodes.firstruns:
             self.logger.debug('Waiting for some other "first-run" nodes')
@@ -128,7 +129,7 @@ class CuemsNodeConf():
                 try:
                     self.controller_ip = netifaces.ifaddresses('bond0')[netifaces.AF_INET][0]['addr']
                     if self.ip != None:
-                        (f"Found bond0 interface, CONTROLLER IP: {self.controller_ip}")
+                        logging.debug(f"Found bond0 interface, CONTROLLER IP: {self.controller_ip}")
                         return
                     else:
                         logging.debug(f"Found bond0 interface, but we are mising ethernet1:avahi interface, continuing")
@@ -166,13 +167,13 @@ class CuemsNodeConf():
         if not map:
             map = self.listener.nodes
 
-        writer = XmlWriter(schema = self.xsd_path, xmlfile = self.map_path, xml_root_tag='CuemsNetworkMap')
+        writer = XmlWriter(schema_name = self.xsd_path, xmlfile = self.map_path, xml_root_tag='CuemsNetworkMap')
         writer.write_from_object(map)
         self.logger.debug("Network map written to XML")
 
 
     def read_network_map(self):
-        reader = XmlReader(schema = self.xsd_path, xmlfile = self.map_path)
+        reader = XmlReader(schema_name = self.xsd_path, xmlfile = self.map_path)
         self.network_map = CuemsNodeDict()
         nodes = reader.read_to_objects()
         for node in nodes:
@@ -238,7 +239,7 @@ class CuemsNodeConf():
         except Exception as e:
             self.logger.debug(f"error publishing alias, {type(e)}. {e}")
 
-    def publish_wifi_alias(self):
+    def publish_controller_alias(self):
         try:
             subprocess.Popen(["avahi-publish", "-aR", WIFI_ALIAS, self.wifi_ip], close_fds=True)
             self.logger.debug(f"Publishing {WIFI_ALIAS} alias in  {self.wifi_ip}")
