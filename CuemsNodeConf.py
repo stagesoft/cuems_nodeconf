@@ -24,7 +24,7 @@ CUEMS_SERVICE_FILE = 'cuems.service'
 CUEMS_MASTER_LOCK_FILE = 'master.lock'
 
 MASTER_ALIAS='controller.local'
-WIFI_ALIAS='formitgo.local'
+CONTROLLER_ALIAS='formitgo.local'
 
 '''
 logging.basicConfig(level=logging.DEBUG,
@@ -241,8 +241,8 @@ class CuemsNodeConf():
 
     def publish_controller_alias(self):
         try:
-            subprocess.Popen(["avahi-publish", "-aR", WIFI_ALIAS, self.wifi_ip], close_fds=True)
-            self.logger.debug(f"Publishing {WIFI_ALIAS} alias in  {self.wifi_ip}")
+            subprocess.Popen(["avahi-publish", "-aR", CONTROLLER_ALIAS, self.controller_ip], close_fds=True)
+            self.logger.debug(f"Publishing {CONTROLLER_ALIAS} alias in  {self.controller_ip}")
         except Exception as e:
             self.logger.debug(f"error publishing alias, {type(e)}. {e}")
 
