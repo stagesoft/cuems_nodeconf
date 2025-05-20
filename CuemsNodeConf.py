@@ -140,7 +140,7 @@ class CuemsNodeConf():
 
     def start_avahi_listener(self):
         # self.listener = CuemsAvahiListener(callback=self.callback)
-        self.listener = CuemsAvahiListener()
+        self.listener = CuemsAvahiListener(ip=self.ip)
         self.browser = ServiceBrowser(
             self.zeroconf, self.services, self.listener)
         time.sleep(2)

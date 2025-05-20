@@ -16,7 +16,8 @@ class CuemsAvahiListener():
         ADD = 1
         UPDATE = 2
 
-    def __init__(self, callback = None):
+    def __init__(self, ip, callback = None):
+        self.ip = ip
         self.callback = callback
         self.logger = logging.getLogger('Avahi-listener')
 
@@ -32,7 +33,15 @@ class CuemsAvahiListener():
     def add_service(self, zeroconf, type_, name):
         info = zeroconf.get_service_info(type_, name)
         self.logger.debug(info)
-        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")] , 'ip' : info.parsed_addresses()[0], 'port': info.port})
+        if len(info.parsed_addresses()) > 1:
+            self.logger.debug(f'Multiple addresses found for {name}!')
+            for address in info.parsed_addresses():
+                if address == self.ip:
+                    ip = address
+        else:
+            ip = info.parsed_addresses()[0] 
+
+        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")] , 'ip' : ip, 'port': info.port})
         try:
             self.nodes[self.get_mac(name)].update(node)
         except KeyError:
@@ -45,7 +54,14 @@ class CuemsAvahiListener():
 
     def update_service(self, zeroconf, type_, name):
         info = zeroconf.get_service_info(type_, name)
-        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")], 'ip' : info.parsed_addresses()[0], 'port': info.port})
+        if len(info.parsed_addresses()) > 1:
+            self.logger.debug(f'Multiple addresses found for {name}!')
+            for address in info.parsed_addresses():
+                if address == self.ip:
+                    ip = address
+        else:
+            ip = info.parsed_addresses()[0] 
+        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")], 'ip' : ip, 'port': info.port})
         self.nodes[self.get_mac(name)].update(node)
         self.logger.debug(f'Service {name} updated, service info: {info}')
 
