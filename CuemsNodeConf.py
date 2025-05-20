@@ -52,10 +52,11 @@ class CuemsNodeConf():
 
         self.xsd_path = os.path.join( CUEMS_CONF_PATH, MAP_SCHEMA_FILE)
         self.map_path = os.path.join( CUEMS_CONF_PATH, MAP_FILE)
-
-        self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
-
+        
         self.get_ips()
+        self.zeroconf = Zeroconf(interfaces=[self.ip],ip_version=IPVersion.V4Only)
+
+        
         
 
         self.services = ['_cuems_nodeconf._tcp.local.']
