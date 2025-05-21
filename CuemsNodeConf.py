@@ -119,12 +119,12 @@ class CuemsNodeConf():
                 self_controller_ip = None
                 logging.debug(f"Found bridge0:avahi interface, IP: {self.ip}")
                 return 
-            except ValueError:
+            except (ValueError, KeyError):
                 logging.debug("bridge0:avahi interface not found, triying next ones")
                 try:
                     self.ip = netifaces.ifaddresses('ethernet1:avahi')[netifaces.AF_INET][0]['addr']
                     logging.debug(f"Found ethernet1:avahi interface, IP: {self.ip}")
-                except ValueError:
+                except (ValueError, KeyError):
                     logging.debug("Waiting for ethernet1:avahi interface to appear")
     
                 try:
@@ -134,7 +134,7 @@ class CuemsNodeConf():
                         return
                     else:
                         logging.debug(f"Found bond0 interface, but we are mising ethernet1:avahi interface, continuing")
-                except ValueError:
+                except (ValueError, KeyError):
                     logging.debug("Waiting for bond0 interface to appear")
             time.sleep(1)
 
