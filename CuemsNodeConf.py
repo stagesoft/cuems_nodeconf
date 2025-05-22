@@ -5,6 +5,8 @@ from os import system
 import sys
 import subprocess
 import systemd.daemon
+import dbus
+import shutil
 
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
 
@@ -22,6 +24,7 @@ MAP_FILE = 'network_map.xml'
 CUEMS_SERVICE_TEMPLATES_PATH = '/usr/share/cuems/'
 CUEMS_SERVICE_FILE = 'cuems.service'
 CUEMS_MASTER_LOCK_FILE = 'master.lock'
+MASTER_INTERFACE_FILE = 'interfaces.master'
 
 MASTER_ALIAS='controller.local'
 CONTROLLER_ALIAS='formitgo.local'
@@ -153,8 +156,9 @@ class CuemsNodeConf():
             # Copy master node service template
             source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.master'
             target = os.path.join('/etc/avahi/services/', CUEMS_SERVICE_FILE)
-            command = f'sudo cp {source} {target}'
-            os.system(command)
+
+            shutil.copy2(source, target)
+            self.change_network_settings_to_master()
         else:
             self.logger.debug('Master present on the in network WE STAY SLAVE')
             self.node.node_type = CuemsNode.NodeType.slave
@@ -263,6 +267,26 @@ class CuemsNodeConf():
                     self.logger.debug("Removed master file")
                 except OSError:
                     self.logger.warning("could not delete master lock file")
+    
+    def restart_network_service(self):
+        try:
+            sysbus = dbus.SystemBus()
+            systemd1 = sysbus.get_object('org.freedesktop.systemd1', '/org/freedesktop/systemd1')
+            manager = dbus.Interface(systemd1, 'org.freedesktop.systemd1.Manager')
+            job = manager.RestartUnit('networking.service', 'fail')
+        except Exception as e:
+            self.logger.error(f"Error restarting networking service: {e}")
+            return False
+        return True
+    def change_network_settings_to_master(self):
+        try:
+            source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, MASTER_INTERFACE_FILE) + '.master'
+            target = '/etc/network/interfaces'
+            shutil.copy2(source, target)
+        except Exception as e:
+            self.logger.error(f"Error copying interfaces file: {e}")
+        
+        return self.restart_network_service()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
