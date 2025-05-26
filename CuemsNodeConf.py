@@ -273,20 +273,16 @@ class CuemsNodeConf():
             sysbus = dbus.SystemBus()
             systemd1 = sysbus.get_object('org.freedesktop.systemd1', '/org/freedesktop/systemd1')
             manager = dbus.Interface(systemd1, 'org.freedesktop.systemd1.Manager')
-            job = manager.RestartUnit('networking.service', 'fail')
             
-            ## wait for network interfaces to come up again
-            while True:
-                try:
-                    interfaces = netifaces.interfaces()
-                    if 'bond0' in interfaces and 'wifi0'  and 'ethernet0' and 'ethernet1' in interfaces:
-                        ip_bond = netifaces.ifaddresses('bond0')
-                        ip_ethernet1 = netifaces.ifaddresses('ethernet1')
-                        if ip_bond and ip_ethernet1:
-                            self.logger.debug("Network interfaces are upagain, continuing")
-                            return True
-                except Exception as e:
-                    self.logger.error(f"Waiting for network interfaces to come up again: {e}")
+            job = manager.StopUnit('networking.service', 'fail')
+            self.logger.debug("Stopping networking service")
+            time.sleep(10)
+            job = manager.StartUnit('networking.service', 'fail')
+            self.logger.debug("Starting networking service")
+            time.sleep(10)
+            self.logger.debug("Networking service restarted successfully, continuing")
+
+            return True
 
         except Exception as e:
             self.logger.error(f"Error restarting networking service: {e}")
