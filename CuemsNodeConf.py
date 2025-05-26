@@ -274,13 +274,27 @@ class CuemsNodeConf():
             systemd1 = sysbus.get_object('org.freedesktop.systemd1', '/org/freedesktop/systemd1')
             manager = dbus.Interface(systemd1, 'org.freedesktop.systemd1.Manager')
             job = manager.RestartUnit('networking.service', 'fail')
+            
+            ## wait for network interfaces to come up again
+            while True:
+                try:
+                    interfaces = netifaces.interfaces()
+                    if 'bond0' in interfaces and 'wifi0'  and 'ethernet0' and 'ethernet1' in interfaces:
+                        ip_bond = netifaces.ifaddresses('bond0')
+                        ip_ethernet1 = netifaces.ifaddresses('ethernet1')
+                        if ip_bond and ip_ethernet1:
+                            self.logger.debug("Network interfaces are upagain, continuing")
+                            return True
+                except Exception as e:
+                    self.logger.error(f"Waiting for network interfaces to come up again: {e}")
+
         except Exception as e:
             self.logger.error(f"Error restarting networking service: {e}")
             return False
-        return True
+        
     def change_network_settings_to_master(self):
         try:
-            source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, MASTER_INTERFACE_FILE) + '.master'
+            source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, MASTER_INTERFACE_FILE)
             target = '/etc/network/interfaces'
             shutil.copy2(source, target)
         except Exception as e:
