@@ -281,8 +281,10 @@ class CuemsNodeConf():
             job = manager.StartUnit('networking.service', 'fail')
             self.logger.debug("Starting networking service")
             time.sleep(10)
-            self.logger.debug("Networking service restarted successfully, continuing")
-
+            self.logger.debug("Networking service restarted successfully")
+            job = manager.StartUnit('avahi-daemon.service', 'fail')
+            time.sleep(10)
+            self.logger.debug("Avahi daemon restarted successfully, continuing")
             return True
 
         except Exception as e:
