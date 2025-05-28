@@ -159,6 +159,7 @@ class CuemsNodeConf():
 
             shutil.copy2(source, target)
             self.change_network_to_master()
+            self.get_ips()
         else:
             self.logger.debug('Master present on the in network WE STAY SLAVE')
             self.node.node_type = CuemsNode.NodeType.slave
