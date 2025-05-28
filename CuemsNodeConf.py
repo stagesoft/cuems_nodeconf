@@ -158,7 +158,7 @@ class CuemsNodeConf():
             target = os.path.join('/etc/avahi/services/', CUEMS_SERVICE_FILE)
 
             shutil.copy2(source, target)
-            self.change_network_settings_to_master()
+            self.change_network_to_master()
         else:
             self.logger.debug('Master present on the in network WE STAY SLAVE')
             self.node.node_type = CuemsNode.NodeType.slave
@@ -268,7 +268,7 @@ class CuemsNodeConf():
                 except OSError:
                     self.logger.warning("could not delete master lock file")
     
-    def restart_network_service(self):
+    def change_network_to_master(self):
         try:
             sysbus = dbus.SystemBus()
             systemd1 = sysbus.get_object('org.freedesktop.systemd1', '/org/freedesktop/systemd1')
@@ -277,6 +277,7 @@ class CuemsNodeConf():
             job = manager.StopUnit('networking.service', 'fail')
             self.logger.debug("Stopping networking service")
             time.sleep(10)
+            self.change_network_settings_to_master()
             job = manager.StartUnit('networking.service', 'fail')
             self.logger.debug("Starting networking service")
             time.sleep(10)
@@ -289,6 +290,8 @@ class CuemsNodeConf():
             return False
         
     def change_network_settings_to_master(self):
+
+
         try:
             source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, MASTER_INTERFACE_FILE)
             target = '/etc/network/interfaces'
@@ -296,7 +299,6 @@ class CuemsNodeConf():
         except Exception as e:
             self.logger.error(f"Error copying interfaces file: {e}")
         
-        return self.restart_network_service()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
