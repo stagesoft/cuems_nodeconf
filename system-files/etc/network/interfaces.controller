@@ -26,4 +26,5 @@ iface wifi0 inet manual
 	bond-primary eth0
 #	wpa-bridge bond0
 
+auto ethernet0
 iface ethernet1 inet ipv4ll
