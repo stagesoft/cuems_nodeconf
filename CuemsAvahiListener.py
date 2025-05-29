@@ -31,16 +31,22 @@ class CuemsAvahiListener():
             self.callback(action=CuemsAvahiListener.Action.DELETE)
 
     def add_service(self, zeroconf, type_, name):
+        ip = None
         info = zeroconf.get_service_info(type_, name)
         self.logger.debug(info)
+        
         if len(info.parsed_addresses()) > 1:
             self.logger.debug(f'Multiple addresses found for {name}!')
+            ## if ip is one of the internal interfaces, use that one, if not use the first one
             for address in info.parsed_addresses():
                 if address == self.ip:
                     ip = address
+            if not ip:
+                ip = info.parsed_addresses()[0]
         else:
-            ip = info.parsed_addresses()[0] 
+            ip = info.parsed_addresses()[0]
 
+        self.logger.debug(f'node ip: {ip}')
         node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")] , 'ip' : ip, 'port': info.port})
         try:
             self.nodes[self.get_mac(name)].update(node)
