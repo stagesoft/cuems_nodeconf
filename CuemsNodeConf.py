@@ -22,10 +22,11 @@ from cuemsutils.log import Logger, logged
 CUEMS_CONF_PATH = '/etc/cuems/'
 MAP_SCHEMA_FILE = 'network_map.xsd'
 MAP_FILE = 'network_map.xml'
-CUEMS_SERVICE_TEMPLATES_PATH = '/usr/share/cuems/'
+TEMPLATES_PATH = '/usr/share/cuems/'
 CUEMS_SERVICE_FILE = 'cuems.service'
 CUEMS_MASTER_LOCK_FILE = 'master.lock'
-MASTER_INTERFACE_FILE = 'interfaces.master'
+CONTROLLER_INTERFACES_TEMPLATE = 'interfaces.master'
+NODE_INTERFACES_TEMPLATE = 'interfaces.node'
 
 MASTER_ALIAS='controller.local'
 CONTROLLER_ALIAS='formitgo.local'
