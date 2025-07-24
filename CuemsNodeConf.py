@@ -56,18 +56,30 @@ class CuemsNodeConf():
 
         self.xsd_path = os.path.join( CUEMS_CONF_PATH, MAP_SCHEMA_FILE)
         self.map_path = os.path.join( CUEMS_CONF_PATH, MAP_FILE)
-        
-        self.get_ips()
-        self.zeroconf = Zeroconf(interfaces=[self.ip],ip_version=IPVersion.V4Only)
-
-        
-        
 
         self.services = ['_cuems_nodeconf._tcp.local.']
+        
+
+         #TODO: add timeout for the waiting loops
+    def stop():
+        pass
+        exit(-1)
+    def start(self):
+        Logger.debug('Starting CuemsNodeConf')
+        try:
+            self.get_ips()
+        except TimeoutError:
+            Logger.error('Could not find network interfaces')
+
+        self.zeroconf = Zeroconf(interfaces=[self.ip],ip_version=IPVersion.V4Only)
 
         self.start_avahi_listener()
         
-        self.node = self.retreive_local_node()
+        try:
+            self.node = self.retreive_local_node()
+        except TimeoutError:
+            Logger.critical('Could not find local node on the network')
+            sys.exit(-1)
 
         # Check for first run flag in service file
         if self.node.node_type == CuemsNode.NodeType.firstrun:
@@ -113,11 +125,10 @@ class CuemsNodeConf():
         Logger.debug('Startup complete, notifying systemd')
         systemd.daemon.notify('READY=1')
 
-         #TODO: add timeout for the waiting loops
     def get_ips(self):
         self.ip = None
         self.controller_ip = None
-        while True:
+        for passed in Timeoutloop(timeout=10, interval=1):
             try:
                 self.ip = netifaces.ifaddresses('bridge0:avahi')[netifaces.AF_INET][0]['addr']
                 self_controller_ip = None
@@ -139,7 +150,6 @@ class CuemsNodeConf():
                     else:
                         Logger.debug(f"Found bond0 interface, but we are mising ethernet1:avahi interface, continuing")
                 except (ValueError, KeyError):
-            time.sleep(1)
                     Logger.debug("Waiting for bond0 interface to appear")
 
     def start_avahi_listener(self):
@@ -155,7 +165,7 @@ class CuemsNodeConf():
             self.node.node_type = CuemsNode.NodeType.master
 
             # Copy master node service template
-            source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.master'
+            source = os.path.join(TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.master'
             target = os.path.join('/etc/avahi/services/', CUEMS_SERVICE_FILE)
 
             shutil.copy2(source, target)
@@ -166,7 +176,7 @@ class CuemsNodeConf():
             self.node.node_type = CuemsNode.NodeType.slave
 
             # Copy slave node service template
-            source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.slave'
+            source = os.path.join(TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.slave'
             target = os.path.join('/etc/avahi/services/', CUEMS_SERVICE_FILE)
             os.system(f'sudo cp {source} {target}')
         
@@ -226,18 +236,14 @@ class CuemsNodeConf():
     def retreive_local_node(self):
         retries = 0
         sleep_time = 1.5
-        while retries < 6:
+        for passed in Timeoutloop(timeout=10, interval=1):
             for node in self.listener.nodes.values():
                 if node.ip == self.ip:
                     found = True
                     return node
 
-            time.sleep(sleep_time)
-            sleep_time = sleep_time * 2
-            self.logger.debug("waiting for local node to appear on the network")
-            retries += 1
+            Logger.debug("waiting for local node to appear on the network")
         
-        raise Exception('Local node avahi service not detected')
 
     def publish_master_alias(self):
         try:
@@ -297,14 +303,8 @@ class CuemsNodeConf():
 
 
         try:
-            source = os.path.join(CUEMS_SERVICE_TEMPLATES_PATH, MASTER_INTERFACE_FILE)
+            source = os.path.join(TEMPLATES_PATH, CONTROLLER_INTERFACES_TEMPLATE)
             target = '/etc/network/interfaces'
             shutil.copy2(source, target)
         except Exception as e:
-        
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(name)s: %(message)s',
-                        )
-    CuemsNodeConf()            Logger.error(f"Error copying interfaces file: {e}")            Logger.error(f"Error copying interfaces file: {e}")
+            Logger.error(f"Error copying interfaces file: {e}")
