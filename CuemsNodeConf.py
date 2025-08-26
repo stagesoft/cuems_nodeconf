@@ -64,8 +64,12 @@ class CuemsNodeConf():
     def stop():
         pass
         exit(-1)
+
     def start(self):
         Logger.debug('Starting CuemsNodeConf')
+        self.run()
+    def run(self):
+        Logger.debug('Running CuemsNodeConf')
         try:
             self.get_ips()
         except TimeoutError:
@@ -121,10 +125,13 @@ class CuemsNodeConf():
         #     sys.exit(100)
         # elif self.node.node_type == CuemsNode.NodeType.slave:
         #     sys.exit(101)
+        # else:
+        self.notify_systemd()
+        
+    def notify_systemd(self, status='READY=1'):
 
         Logger.debug('Startup complete, notifying systemd')
-        systemd.daemon.notify('READY=1')
-
+        systemd.daemon.notify(status)
     def get_ips(self):
         self.ip = None
         self.controller_ip = None
