@@ -47,7 +47,7 @@ class CuemsAvahiListener():
             ip = info.parsed_addresses()[0]
 
         self.logger.debug(f'node ip: {ip}')
-        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")] , 'ip' : ip, 'port': info.port})
+        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")] , 'ip' : ip, 'port': info.port, 'online': True})
         try:
             self.nodes[self.get_mac(name)].update(node)
         except KeyError:
@@ -67,7 +67,7 @@ class CuemsAvahiListener():
                     ip = address
         else:
             ip = info.parsed_addresses()[0] 
-        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")], 'ip' : ip, 'port': info.port})
+        node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[list(info.properties.keys())[0]].decode("utf-8")], 'ip' : ip, 'port': info.port, 'online': True})
         self.nodes[self.get_mac(name)].update(node)
         self.logger.debug(f'Service {name} updated, service info: {info}')
 
