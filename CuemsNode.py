@@ -92,6 +92,14 @@ class CuemsNode(dict):
     def mac(self, value):
         return super().__setitem__('mac', value)
 
+    @property
+    def adopted(self):
+        return super().get('adopted', False)
+
+    @adopted.setter
+    def adopted(self, value):
+        return super().__setitem__('adopted', value)
+
     # def __repr__(self):
     #     _dict = str({"name" : super().__getitem__('name'), "present" : super().__getitem__('present')})
     #     return _dict

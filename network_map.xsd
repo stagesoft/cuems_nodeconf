@@ -23,6 +23,7 @@
             <xs:element name="node_type" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="ip" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="port" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
+            <xs:element name="adopted" minOccurs="0" maxOccurs="1" type="xs:boolean"/>
         </xs:sequence>
     </xs:complexType>
 

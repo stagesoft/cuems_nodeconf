@@ -10,14 +10,15 @@ import shutil
 
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
 
-
-
 from CuemsAvahiListener import CuemsAvahiListener
 from CuemsNode import CuemsNode, CuemsNodeDict
 
 from cuemsutils.xml.XmlReaderWriter import XmlReader, XmlWriter
 from cuemsutils.timeoutloop import Timeoutloop
 from cuemsutils.log import Logger, logged
+from communicate import AsyncCommsThread, TIMEOUT
+import asyncio
+
 
 CUEMS_CONF_PATH = '/etc/cuems/'
 MAP_SCHEMA_FILE = 'network_map.xsd'
@@ -56,6 +57,7 @@ class CuemsNodeConf():
 
         self.xsd_path = os.path.join( CUEMS_CONF_PATH, MAP_SCHEMA_FILE)
         self.map_path = os.path.join( CUEMS_CONF_PATH, MAP_FILE)
+        self.network_map = CuemsNodeDict()
 
         self.services = ['_cuems_nodeconf._tcp.local.']
         
@@ -67,13 +69,61 @@ class CuemsNodeConf():
 
     def start(self):
         Logger.debug('Starting CuemsNodeConf')
+        self.set_comms()
         self.run()
+
+
+    def set_comms(self):
+        Logger.info('Setting up Communicators')
+        self.communications_thread = AsyncCommsThread(self.engine_callback)
+        self.communications_thread.start()
+
+    def engine_callback(self, message, context):
+        try:
+            action = message.get('action')
+            if action == 'nodelist_modify':
+                node_uuid = message.get('value')
+                modify_action = message.get('modify_action')
+                
+                if modify_action == 'ADD':
+                    result = self.adopt_node(node_uuid)
+                elif modify_action == 'REMOVE':
+                    result = self.unadopt_node(node_uuid)
+                else:
+                    result = {'OK': False, 'error': f'Invalid modify_action: {modify_action}'}
+                
+                response = {'OK': result.get('OK', False)}
+                if 'error' in result:
+                    response['error'] = result['error']
+                
+                asyncio.run_coroutine_threadsafe(
+                    self.communications_thread.respond_to_engine(response, context),
+                    self.communications_thread.event_loop
+                )
+                return
+        except Exception as e:
+            Logger.error(f'Error in engine_callback: {e}')
+            Logger.exception(e)
+            error_response = {'OK': False, 'error': str(e)}
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.respond_to_engine(error_response, context),
+                self.communications_thread.event_loop
+            )
+
     def run(self):
         Logger.debug('Running CuemsNodeConf')
         try:
             self.get_ips()
         except TimeoutError:
             Logger.error('Could not find network interfaces')
+
+        self.is_first_run = not os.path.isfile(self.map_path)
+        if not self.is_first_run:
+            Logger.debug('Reading existing network_map.xml')
+            self.read_network_map()
+        else:
+            Logger.debug('No existing network_map.xml found, starting fresh')
+            self.network_map = CuemsNodeDict()
 
         self.zeroconf = Zeroconf(interfaces=[self.ip],ip_version=IPVersion.V4Only)
 
@@ -112,8 +162,12 @@ class CuemsNodeConf():
 
         self.check_nodes()
 
+        self.merge_discovered_nodes()
+        self.set_master_always_adopted()
+        self.check_missing_adopted_nodes()
+
         try:
-            self.write_network_map()
+            self.write_network_map(self.network_map)
         except Exception as e:
             Logger.exception(e)
 
@@ -189,11 +243,75 @@ class CuemsNodeConf():
         
     def write_network_map(self, map=None):
         if not map:
-            map = self.listener.nodes
+            map = self.network_map if hasattr(self, 'network_map') and self.network_map else self.listener.nodes
 
         writer = XmlWriter(schema_name = self.xsd_path, xmlfile = self.map_path, xml_root_tag='CuemsNetworkMap')
         writer.write_from_object(map)
         Logger.debug("Network map written to XML")
+
+    def merge_discovered_nodes(self):
+        Logger.debug('Merging discovered nodes with network_map')
+        for mac, discovered_node in self.listener.nodes.items():
+            if mac in self.network_map:
+                existing_node = self.network_map[mac]
+                preserved_adopted = existing_node.adopted
+                self.network_map[mac].update(discovered_node)
+                self.network_map[mac].adopted = preserved_adopted
+                Logger.debug(f'Merged node {mac}, preserved adopted={preserved_adopted}')
+            else:
+                self.network_map[mac] = discovered_node
+                self.network_map[mac].adopted = False
+                Logger.debug(f'Added new discovered node {mac}')
+
+    def set_master_always_adopted(self):
+        for mac, node in self.network_map.items():
+            if node.node_type == CuemsNode.NodeType.master:
+                node.adopted = True
+                Logger.debug(f'Set master node {mac} as always adopted')
+        
+        if self.is_first_run:
+            for mac, node in self.network_map.items():
+                if node.node_type != CuemsNode.NodeType.master:
+                    node.adopted = False
+
+    def check_missing_adopted_nodes(self):
+        adopted_nodes = [node for node in self.network_map.values() if node.adopted]
+        discovered_uuids = {node.uuid for node in self.listener.nodes.values()}
+        
+        missing_adopted = []
+        for node in adopted_nodes:
+            if node.uuid not in discovered_uuids:
+                missing_adopted.append(node)
+        
+        if missing_adopted:
+            Logger.warning(f'Missing adopted nodes: {[f"{n.name} ({n.uuid})" for n in missing_adopted]}')
+        else:
+            Logger.debug('All adopted nodes are present')
+
+    def adopt_node(self, node_uuid):
+        for node in self.network_map.values():
+            if node.uuid == node_uuid:
+                node.adopted = True
+                self.write_network_map(self.network_map)
+                Logger.info(f'Node {node_uuid} adopted')
+                return {'OK': True}
+        
+        Logger.warning(f'Node {node_uuid} not found in network_map')
+        return {'OK': False, 'error': f'Node {node_uuid} not found'}
+
+    def unadopt_node(self, node_uuid):
+        for node in self.network_map.values():
+            if node.uuid == node_uuid:
+                if node.node_type == CuemsNode.NodeType.master:
+                    Logger.warning(f'Cannot unadopt master node {node_uuid}')
+                    return {'OK': False, 'error': 'Cannot unadopt master node'}
+                node.adopted = False
+                self.write_network_map(self.network_map)
+                Logger.info(f'Node {node_uuid} unadopted')
+                return {'OK': True}
+        
+        Logger.warning(f'Node {node_uuid} not found in network_map')
+        return {'OK': False, 'error': f'Node {node_uuid} not found'}
 
 
     def read_network_map(self):
@@ -203,11 +321,11 @@ class CuemsNodeConf():
         for node in nodes:
             self.network_map[node.mac] = node
         
-        print("---")
-        print("Nodes read from existing XML network map:")
+        Logger.debug("---")
+        Logger.debug("Nodes read from existing XML network map:")
         for item, value in self.network_map.items():
-            print(value)
-        print("---")
+            Logger.debug(f"{value}")
+        Logger.debug("---")
 
     def cleanup(self):
         try:
