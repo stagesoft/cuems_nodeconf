@@ -251,17 +251,26 @@ class CuemsNodeConf():
 
     def merge_discovered_nodes(self):
         Logger.debug('Merging discovered nodes with network_map')
+        discovered_macs = set(self.listener.nodes.keys())
+        
         for mac, discovered_node in self.listener.nodes.items():
             if mac in self.network_map:
                 existing_node = self.network_map[mac]
                 preserved_adopted = existing_node.adopted
                 self.network_map[mac].update(discovered_node)
                 self.network_map[mac].adopted = preserved_adopted
+                self.network_map[mac].online = True
                 Logger.debug(f'Merged node {mac}, preserved adopted={preserved_adopted}')
             else:
                 self.network_map[mac] = discovered_node
                 self.network_map[mac].adopted = False
+                self.network_map[mac].online = True
                 Logger.debug(f'Added new discovered node {mac}')
+        
+        for mac, node in self.network_map.items():
+            if mac not in discovered_macs:
+                node.online = False
+                Logger.debug(f'Node {mac} is offline')
 
     def set_master_always_adopted(self):
         for mac, node in self.network_map.items():
@@ -312,7 +321,6 @@ class CuemsNodeConf():
         
         Logger.warning(f'Node {node_uuid} not found in network_map')
         return {'OK': False, 'error': f'Node {node_uuid} not found'}
-
 
     def read_network_map(self):
         reader = XmlReader(schema_name = self.xsd_path, xmlfile = self.map_path)

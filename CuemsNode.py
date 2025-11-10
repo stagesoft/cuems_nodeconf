@@ -100,6 +100,14 @@ class CuemsNode(dict):
     def adopted(self, value):
         return super().__setitem__('adopted', value)
 
+    @property
+    def online(self):
+        return super().get('online', False)
+
+    @online.setter
+    def online(self, value):
+        return super().__setitem__('online', value)
+
     # def __repr__(self):
     #     _dict = str({"name" : super().__getitem__('name'), "present" : super().__getitem__('present')})
     #     return _dict

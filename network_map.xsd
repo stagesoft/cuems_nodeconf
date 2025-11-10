@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cms="http://stagelab.net/cuems">
+<xs:schema targetNamespace="https://stagelab.coop/cuems/" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cms="https://stagelab.coop/cuems/">
     <xs:element name="CuemsNetworkMap">
         <xs:complexType>
             <xs:sequence>
@@ -17,13 +17,14 @@
     <xs:complexType name="NodeType">
         <xs:sequence>
             <!-- <xs:element name="present" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/> -->
-            <xs:element name="uuid" minOccurs="1" maxOccurs="1" type="xs:string"/>
+            <xs:element name="uuid" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="mac" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="name" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="node_type" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
             <xs:element name="ip" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
-            <xs:element name="port" minOccurs="1" maxOccurs="1" type="cms:NonEmptyString"/>
-            <xs:element name="adopted" minOccurs="0" maxOccurs="1" type="xs:boolean"/>
+            <xs:element name="port" minOccurs="1" maxOccurs="1" type="cms:NonPrivilegedPort"/>
+            <xs:element name="adopted" minOccurs="0" maxOccurs="1" type="cms:BoolType"/>
+            <xs:element name="online" minOccurs="0" maxOccurs="1" type="cms:BoolType"/>
         </xs:sequence>
     </xs:complexType>
 
@@ -44,6 +45,20 @@
         <xs:restriction base="xs:string">
             <xs:minLength value="1" />
             <xs:pattern value=".*[^\s].*" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="BoolType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="True" />
+            <xs:enumeration value="False" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="NonPrivilegedPort">
+        <xs:restriction base="xs:positiveInteger">
+            <xs:minInclusive value="1024" />
+            <xs:maxInclusive value="65535" />
         </xs:restriction>
     </xs:simpleType>
 </xs:schema>
