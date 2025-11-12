@@ -115,7 +115,13 @@ class CuemsNodeConf():
         try:
             self.get_ips()
         except TimeoutError:
-            Logger.error('Could not find network interfaces')
+            Logger.critical('Could not find network interfaces within timeout')
+            sys.exit(-1)
+        
+        # Validate that IP was obtained
+        if self.ip is None:
+            Logger.critical('Failed to obtain network IP address. Cannot continue.')
+            sys.exit(-1)
 
         self.is_first_run = not os.path.isfile(self.map_path)
         if not self.is_first_run:
@@ -128,6 +134,14 @@ class CuemsNodeConf():
         self.zeroconf = Zeroconf(interfaces=[self.ip],ip_version=IPVersion.V4Only)
 
         self.start_avahi_listener()
+        
+        # Wait for local service to be registered and discovered
+        Logger.debug('Waiting for local service registration...')
+        try:
+            self.wait_for_local_service_registration()
+        except TimeoutError:
+            Logger.critical('Local service did not register within timeout period')
+            sys.exit(-1)
         
         try:
             self.node = self.retreive_local_node()
@@ -157,8 +171,14 @@ class CuemsNodeConf():
 
         if self.listener.nodes.firstruns:
             Logger.debug('Waiting for some other "first-run" nodes')
-        while self.listener.nodes.firstruns:
+        # Add timeout to prevent infinite loop
+        max_iterations = 60  # 30 seconds max (60 * 0.5)
+        iteration = 0
+        while self.listener.nodes.firstruns and iteration < max_iterations:
             time.sleep(0.5)
+            iteration += 1
+        if iteration >= max_iterations and self.listener.nodes.firstruns:
+            Logger.warning('Timeout waiting for firstrun nodes to resolve. Continuing anyway.')
 
         self.check_nodes()
 
@@ -168,7 +188,11 @@ class CuemsNodeConf():
 
         try:
             self.write_network_map(self.network_map)
+        except PermissionError as e:
+            Logger.error(f"Permission denied writing network map to {self.map_path}: {e}")
+            Logger.exception(e)
         except Exception as e:
+            Logger.error(f"Error writing network map: {type(e).__name__}: {e}")
             Logger.exception(e)
 
         self.update_master_lock_file(os.path.join( CUEMS_CONF_PATH, CUEMS_MASTER_LOCK_FILE))
@@ -192,7 +216,6 @@ class CuemsNodeConf():
         for passed in Timeoutloop(timeout=10, interval=1):
             try:
                 self.ip = netifaces.ifaddresses('bridge0:avahi')[netifaces.AF_INET][0]['addr']
-                self_controller_ip = None
                 Logger.debug(f"Found bridge0:avahi interface, IP: {self.ip}")
                 return 
             except (ValueError, KeyError):
@@ -218,7 +241,6 @@ class CuemsNodeConf():
         self.listener = CuemsAvahiListener(ip=self.ip)
         self.browser = ServiceBrowser(
             self.zeroconf, self.services, self.listener)
-        time.sleep(2)
 
     def set_node_type(self):
         if not self.listener.nodes.masters:
@@ -229,9 +251,28 @@ class CuemsNodeConf():
             source = os.path.join(TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.master'
             target = os.path.join('/etc/avahi/services/', CUEMS_SERVICE_FILE)
 
-            shutil.copy2(source, target)
-            self.change_network_to_master()
-            self.get_ips()
+            try:
+                shutil.copy2(source, target)
+            except FileNotFoundError:
+                Logger.error(f"Master service template not found at {source}")
+                raise
+            except PermissionError:
+                Logger.error(f"Permission denied copying service template to {target}")
+                raise
+            except Exception as e:
+                Logger.error(f"Error copying master service template: {type(e).__name__}: {e}")
+                Logger.exception(e)
+                raise
+            
+            if not self.change_network_to_master():
+                Logger.error("Failed to change network to master configuration")
+                raise RuntimeError("Network configuration change failed")
+            
+            try:
+                self.get_ips()
+            except TimeoutError:
+                Logger.error("Failed to get IP addresses after network change")
+                raise
         else:
             Logger.debug('Master present on the in network WE STAY SLAVE')
             self.node.node_type = CuemsNode.NodeType.slave
@@ -239,7 +280,15 @@ class CuemsNodeConf():
             # Copy slave node service template
             source = os.path.join(TEMPLATES_PATH, CUEMS_SERVICE_FILE) + '.slave'
             target = os.path.join('/etc/avahi/services/', CUEMS_SERVICE_FILE)
-            os.system(f'sudo cp {source} {target}')
+            try:
+                result = os.system(f'sudo cp {source} {target}')
+                if result != 0:
+                    Logger.error(f"Failed to copy slave service template (exit code: {result})")
+                    raise RuntimeError(f"Failed to copy slave service template")
+            except Exception as e:
+                Logger.error(f"Error copying slave service template: {type(e).__name__}: {e}")
+                Logger.exception(e)
+                raise
         
     def write_network_map(self, map=None):
         if not map:
@@ -300,6 +349,16 @@ class CuemsNodeConf():
     def adopt_node(self, node_uuid):
         for node in self.network_map.values():
             if node.uuid == node_uuid:
+                # Check if node is already adopted
+                if node.adopted:
+                    Logger.debug(f'Node {node_uuid} is already adopted')
+                    return {'OK': True, 'message': 'Node already adopted'}
+                
+                # Check if node is online
+                if not node.online:
+                    Logger.warning(f'Cannot adopt node {node_uuid}: node is offline')
+                    return {'OK': False, 'error': f'Cannot adopt node {node_uuid}: node is offline'}
+                
                 node.adopted = True
                 self.write_network_map(self.network_map)
                 Logger.info(f'Node {node_uuid} adopted')
@@ -314,6 +373,17 @@ class CuemsNodeConf():
                 if node.node_type == CuemsNode.NodeType.master:
                     Logger.warning(f'Cannot unadopt master node {node_uuid}')
                     return {'OK': False, 'error': 'Cannot unadopt master node'}
+                
+                # Check if node is already unadopted
+                if not node.adopted:
+                    Logger.debug(f'Node {node_uuid} is already unadopted')
+                    return {'OK': True, 'message': 'Node already unadopted'}
+                
+                # Note: Offline nodes can and should be unadoptable
+                # This allows cleaning up nodes that have gone offline
+                if not node.online:
+                    Logger.info(f'Unadopting offline node {node_uuid} (node is not online)')
+                
                 node.adopted = False
                 self.write_network_map(self.network_map)
                 Logger.info(f'Node {node_uuid} unadopted')
@@ -366,31 +436,59 @@ class CuemsNodeConf():
 
         return False
     
+    def wait_for_local_service_registration(self):
+        """
+        Wait for the local service to be registered and discovered by the Avahi listener.
+        This ensures the service is available before we try to retrieve it.
+        """
+        for passed in Timeoutloop(timeout=5, interval=0.2):
+            for node in self.listener.nodes.values():
+                if node.ip == self.ip:
+                    Logger.debug(f'Local service registered and discovered: {node.name}')
+                    return
+            
+            Logger.debug("Waiting for local service to be registered...")
+        
+        # Timeout occurred - Timeoutloop will raise TimeoutError
+        raise TimeoutError('Local service registration not detected within timeout period')
+
     def retreive_local_node(self):
-        retries = 0
-        sleep_time = 1.5
         for passed in Timeoutloop(timeout=10, interval=1):
             for node in self.listener.nodes.values():
                 if node.ip == self.ip:
-                    found = True
                     return node
 
             Logger.debug("waiting for local node to appear on the network")
         
+        # Timeout occurred - Timeoutloop will raise TimeoutError
+        raise TimeoutError('Local node not found within timeout period')
+        
 
     def publish_master_alias(self):
         try:
+            if self.ip is None:
+                Logger.warning(f"Cannot publish {MASTER_ALIAS} alias: IP address is None")
+                return
             subprocess.Popen(["avahi-publish", "-aR", MASTER_ALIAS, self.ip], close_fds=True)
-            Logger.debug(f"Publishing {MASTER_ALIAS} alias in  {self.ip}")
+            Logger.debug(f"Publishing {MASTER_ALIAS} alias in {self.ip}")
+        except FileNotFoundError:
+            Logger.error(f"avahi-publish command not found. Cannot publish {MASTER_ALIAS} alias")
         except Exception as e:
-            Logger.debug(f"error publishing alias, {type(e)}. {e}")
+            Logger.error(f"Error publishing {MASTER_ALIAS} alias: {type(e).__name__}: {e}")
+            Logger.exception(e)
 
     def publish_controller_alias(self):
         try:
+            if self.controller_ip is None:
+                Logger.warning(f"Cannot publish {CONTROLLER_ALIAS} alias: controller IP address is None")
+                return
             subprocess.Popen(["avahi-publish", "-aR", CONTROLLER_ALIAS, self.controller_ip], close_fds=True)
-            Logger.debug(f"Publishing {CONTROLLER_ALIAS} alias in  {self.controller_ip}")
+            Logger.debug(f"Publishing {CONTROLLER_ALIAS} alias in {self.controller_ip}")
+        except FileNotFoundError:
+            Logger.error(f"avahi-publish command not found. Cannot publish {CONTROLLER_ALIAS} alias")
         except Exception as e:
-            Logger.debug(f"error publishing alias, {type(e)}. {e}")
+            Logger.error(f"Error publishing {CONTROLLER_ALIAS} alias: {type(e).__name__}: {e}")
+            Logger.exception(e)
 
     def update_master_lock_file(self, path):
         if self.node.node_type == CuemsNode.NodeType.master:
@@ -418,18 +516,37 @@ class CuemsNodeConf():
             job = manager.StopUnit('networking.service', 'fail')
             Logger.debug("Stopping networking service")
             time.sleep(10)
-            self.change_network_settings_to_master()
+            
+            try:
+                self.change_network_settings_to_master()
+            except Exception as e:
+                Logger.error(f"Error changing network settings: {e}")
+                Logger.exception(e)
+                return False
+            
             job = manager.StartUnit('networking.service', 'fail')
             Logger.debug("Starting networking service")
             time.sleep(10)
             Logger.debug("Networking service restarted successfully")
-            job = manager.StartUnit('avahi-daemon.service', 'fail')
-            time.sleep(10)
-            Logger.debug("Avahi daemon restarted successfully, continuing")
+            
+            try:
+                job = manager.StartUnit('avahi-daemon.service', 'fail')
+                time.sleep(10)
+                Logger.debug("Avahi daemon restarted successfully, continuing")
+            except Exception as e:
+                Logger.warning(f"Error restarting avahi-daemon service: {e}")
+                Logger.exception(e)
+                # Continue anyway as this is not critical
+            
             return True
 
+        except dbus.exceptions.DBusException as e:
+            Logger.error(f"DBus error restarting networking service: {e}")
+            Logger.exception(e)
+            return False
         except Exception as e:
-            Logger.error(f"Error restarting networking service: {e}")
+            Logger.error(f"Error restarting networking service: {type(e).__name__}: {e}")
+            Logger.exception(e)
             return False
         
     def change_network_settings_to_master(self):

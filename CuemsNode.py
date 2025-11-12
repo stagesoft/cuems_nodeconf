@@ -69,14 +69,6 @@ class CuemsNode(dict):
         return super().__setitem__('ip', value)
 
     @property
-    def port(self):
-        return super().__getitem__('port')
-
-    @port.setter
-    def port(self, value):
-        return super().__setitem__('port', value)
-
-    @property
     def uuid(self):
         return super().__getitem__('uuid')
 

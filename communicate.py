@@ -41,7 +41,7 @@ class AsyncCommsThread(threading.Thread):
         self.event_loop.create_task(self.run_asyncio_comms())
         self.event_loop.run_forever()
     def stop(self):
-        stop_requested = True
+        self.stop_requested = True
         asyncio.run_coroutine_threadsafe(self.stop_async(), self.event_loop)
     
     async def stop_async(self):
