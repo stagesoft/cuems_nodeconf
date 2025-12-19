@@ -1,0 +1,11 @@
+cuems-nodeconf (0.1.0-1) bookworm; urgency=medium
+
+  * Initial Debian package release
+  * Node configuration and network management for CUEMS system
+  * Avahi/Zeroconf service discovery support
+  * Network interface management
+  * Node-to-controller communication
+  * Integration with cuems-utils virtual environment
+  * Systemd service for automatic startup
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 19 Dec 2024 00:00:00 +0000

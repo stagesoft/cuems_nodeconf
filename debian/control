@@ -1,0 +1,36 @@
+Source: cuems-nodeconf
+Section: python
+Priority: optional
+Maintainer: Ion Reguera <ion@stagelab.coop>
+Build-Depends: debhelper-compat (= 13),
+               dh-virtualenv (>= 1.2),
+               python3-all,
+               python3-setuptools,
+               python3-pip,
+               python3-dev
+Standards-Version: 4.6.0
+Homepage: https://github.com/cuems/cuems-nodeconf
+
+Package: cuems-nodeconf
+Architecture: all
+Depends: ${misc:Depends},
+         ${python3:Depends},
+         cuems-utils (>= 0.1.0rc4),
+         cuems-common (>= 1.0.0),
+         python3 (>= 3.11),
+         python3-netifaces,
+         python3-zeroconf,
+         python3-dbus,
+         python3-systemd (>= 235)
+Description: CUEMS Node Configuration - Node configuration and network management
+ CUEMS Node Configuration provides network discovery, node adoption,
+ and configuration management for CUEMS nodes. It handles Avahi/Zeroconf
+ service discovery, network interface management, and node-to-controller
+ communication.
+ .
+ This package installs into the /usr/lib/cuems/ virtual environment
+ provided by cuems-utils. Console script is installed to
+ /usr/lib/cuems/bin/cuems-nodeconf.
+ .
+ The systemd service file is provided by cuems-common and runs the
+ cuems-nodeconf console script.
