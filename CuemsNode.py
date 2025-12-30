@@ -2,35 +2,35 @@ import enum
 
 
 
-class CuemsNodeDict(dict):
+class node_list(dict):
 
     @property
     def masters(self):
         master_list = list()
 
-        for node in super().values():
-            if node.node_type == CuemsNode.NodeType.master:
-                master_list.append(node)
+        for node_obj in super().values():
+            if node_obj.node_type == node.NodeType.master:
+                master_list.append(node_obj)
         return master_list
     @property
     def slaves(self):
         slave_list = list()
 
-        for node in super().values():
-            if node.node_type == CuemsNode.NodeType.slave:
-                slave_list.append(node)
+        for node_obj in super().values():
+            if node_obj.node_type == node.NodeType.slave:
+                slave_list.append(node_obj)
         return slave_list
         
     @property
     def firstruns(self):
         firstrun_list = list()
 
-        for node in super().values():
-            if node.node_type == CuemsNode.NodeType.firstrun:
-                firstrun_list.append(node)
+        for node_obj in super().values():
+            if node_obj.node_type == node.NodeType.firstrun:
+                firstrun_list.append(node_obj)
         return firstrun_list
         
-class CuemsNode(dict):
+class node(dict):
 
     @enum.unique
     class NodeType(enum.Enum):
@@ -103,3 +103,7 @@ class CuemsNode(dict):
     # def __repr__(self):
     #     _dict = str({"name" : super().__getitem__('name'), "present" : super().__getitem__('present')})
     #     return _dict
+
+# Backwards compatibility aliases
+CuemsNodeDict = node_list
+CuemsNode = node

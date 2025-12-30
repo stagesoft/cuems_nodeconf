@@ -2,7 +2,7 @@
 
 from cuemsutils.daemon import run_daemon
 from cuemsutils.log import Logger
-from CuemsNodeConf import CuemsNodeConf
+from .CuemsNodeConf import CuemsNodeConf
 
 
 
