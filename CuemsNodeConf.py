@@ -305,9 +305,9 @@ class CuemsNodeConf():
                     Logger.error(f"Node {mac} has None value for required field '{field}'. Node data: {dict(node)}")
                     raise ValueError(f"Cannot write network map: Node {mac} has None value for required field '{field}'")
             
-            # Ensure node_type is stored as string name, not enum object
+            # Ensure node_type is stored as string with NodeType. prefix for cuems-engine compatibility
             if hasattr(node.get('node_type'), 'name'):
-                node['node_type'] = node['node_type'].name
+                node['node_type'] = f"NodeType.{node['node_type'].name}"
             
             # Ensure adopted and online are properly set as booleans
             # XmlWriter will convert these to 'True'/'False' strings as per BoolType in XSD
