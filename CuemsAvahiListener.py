@@ -1,4 +1,4 @@
-from CuemsNode import CuemsNodeDict, CuemsNode
+from .CuemsNode import CuemsNodeDict, CuemsNode
 import enum
 import logging
 
