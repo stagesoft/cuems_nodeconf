@@ -12,10 +12,12 @@ from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Ze
 
 from CuemsAvahiListener import CuemsAvahiListener
 from CuemsNode import CuemsNode, CuemsNodeDict
+import NodeXmlBuilders  # Register custom XML builders for node_list and node
 
 from cuemsutils.xml.XmlReaderWriter import XmlReader, XmlWriter
 from cuemsutils.timeoutloop import Timeoutloop
 from cuemsutils.log import Logger, logged
+from cuemsutils.helpers import strtobool
 from communicate import AsyncCommsThread, TIMEOUT
 import asyncio
 
@@ -294,6 +296,39 @@ class CuemsNodeConf():
         if not map:
             map = self.network_map if hasattr(self, 'network_map') and self.network_map else self.listener.nodes
 
+        # Validate and prepare nodes before writing
+        required_fields = ['uuid', 'mac', 'name', 'node_type', 'ip']
+        for mac, node in map.items():
+            for field in required_fields:
+                value = node.get(field)
+                if value is None:
+                    Logger.error(f"Node {mac} has None value for required field '{field}'. Node data: {dict(node)}")
+                    raise ValueError(f"Cannot write network map: Node {mac} has None value for required field '{field}'")
+            
+            # Ensure node_type is stored as string name, not enum object
+            if hasattr(node.get('node_type'), 'name'):
+                node['node_type'] = node['node_type'].name
+            
+            # Ensure adopted and online are properly set as booleans
+            # XmlWriter will convert these to 'True'/'False' strings as per BoolType in XSD
+            if 'adopted' not in node:
+                node['adopted'] = False
+            elif isinstance(node['adopted'], str):
+                # Convert string to boolean if needed (from old XML files)
+                try:
+                    node['adopted'] = strtobool(node['adopted'])
+                except ValueError:
+                    node['adopted'] = False
+            
+            if 'online' not in node:
+                node['online'] = False
+            elif isinstance(node['online'], str):
+                # Convert string to boolean if needed (from old XML files)
+                try:
+                    node['online'] = strtobool(node['online'])
+                except ValueError:
+                    node['online'] = False
+
         writer = XmlWriter(schema_name = self.xsd_path, xmlfile = self.map_path, xml_root_tag='CuemsNetworkMap')
         writer.write_from_object(map)
         Logger.debug("Network map written to XML")
@@ -397,6 +432,23 @@ class CuemsNodeConf():
         self.network_map = CuemsNodeDict()
         nodes = reader.read_to_objects()
         for node in nodes:
+            # Normalize node_type - handle both "master" and "NodeType.master" formats
+            if 'node_type' in node:
+                node_type_str = str(node['node_type'])
+                # Remove "NodeType." prefix if present
+                if node_type_str.startswith('NodeType.'):
+                    node_type_str = node_type_str.replace('NodeType.', '')
+                # Convert to enum
+                try:
+                    node['node_type'] = CuemsNode.NodeType[node_type_str]
+                except KeyError:
+                    Logger.error(f"Invalid node_type '{node_type_str}' for node {node.get('mac', 'unknown')}")
+                    # Default to slave if invalid
+                    node['node_type'] = CuemsNode.NodeType.slave
+            
+            # Note: Boolean fields are already parsed by CuemsParser using strtobool
+            # No additional conversion needed - they come as Python bool from read_to_objects()
+            
             self.network_map[node.mac] = node
         
         Logger.debug("---")

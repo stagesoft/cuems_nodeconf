@@ -3,14 +3,14 @@
     <xs:element name="CuemsNetworkMap">
         <xs:complexType>
             <xs:sequence>
-                <xs:element name="CuemsNodeDict" minOccurs="0" maxOccurs="1" type="cms:NodeDictType" />
+                <xs:element name="node_list" minOccurs="0" maxOccurs="1" type="cms:NodeDictType" />
             </xs:sequence>
         </xs:complexType>
     </xs:element>
 
     <xs:complexType name="NodeDictType">
         <xs:sequence>
-            <xs:element name="CuemsNode" minOccurs="0" maxOccurs="unbounded" type="cms:NodeType" />
+            <xs:element name="node" minOccurs="0" maxOccurs="unbounded" type="cms:NodeType" />
         </xs:sequence>
     </xs:complexType>
 

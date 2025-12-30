@@ -113,7 +113,7 @@ class CuemsAvahiListener():
                 self.logger.error(f'Missing node_type property for service {name}')
                 return
             
-            node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")], 'ip' : ip, 'adopted': False, 'online': True})
+            node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")], 'ip' : ip, 'adopted': False, 'online': True})
             self.nodes[self.get_mac(name)].update(node)
             self.logger.debug(f'Service {name} updated, service info: {info}')
 
