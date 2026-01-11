@@ -1,0 +1,9 @@
+site_name: Cuems NodeConf - FormitGo nodes discovery and configuration
+repo_url: https://github.com/cuems/cuems-nodeconf
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
