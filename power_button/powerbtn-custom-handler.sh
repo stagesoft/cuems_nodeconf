@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
 SHOW_LOCK_FILE=/etc/cuems/show.lock
 SERVICE_FILE=/etc/avahi/services/cuems.service
 FIRST_RUN_SERVICE_FILE=/usr/share/cuems/cuems.service.firstrun

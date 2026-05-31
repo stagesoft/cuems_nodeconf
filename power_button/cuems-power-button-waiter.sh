@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
+# SPDX-License-Identifier: GPL-3.0-or-later
 SLEEP_TIME=3
 LOGGER_BINARY=/usr/bin/logger
 LOGGER_OPTIONS="-p local0.info -t CUEMS_POWER -i"

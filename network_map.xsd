@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <xs:schema targetNamespace="http://stagelab.net/cuems" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:cms="http://stagelab.net/cuems">
     <xs:element name="CuemsNetworkMap">
         <xs:complexType>

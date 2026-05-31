@@ -1,4 +1,6 @@
 <?xml version="1.0" standalone='no'?>
+<!-- SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!--*-nxml-*-->
 <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
 
