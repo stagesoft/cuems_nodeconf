@@ -849,6 +849,7 @@ A Debian package (`cuems-nodeconf_*.deb`) should install:
 - The ACPI scripts to `/etc/acpi/`.
 - A systemd service unit that invokes `cuems-nodeconf` at boot with
   `SuccessExitStatus=100 101`.
+- Additional independent `cuems-hwdiscovery` daemon derived from `CuemsHwDiscovery` class.
 
 ### Target badge set
 
