@@ -1,0 +1,67 @@
+#!/bin/bash
+set -e
+
+CUEMS_VENV="/usr/lib/cuems"
+
+case "$1" in
+    configure)
+        # Verify virtual environment exists
+        if [ ! -f "$CUEMS_VENV/bin/python3" ]; then
+            echo "ERROR: Virtual environment not found at $CUEMS_VENV" >&2
+            echo "Please ensure cuems-utils package is properly installed." >&2
+            exit 1
+        fi
+        
+        # Verify console script was installed
+        if [ ! -f "$CUEMS_VENV/bin/cuems-nodeconf" ]; then
+            echo "WARNING: Console script cuems-nodeconf not found" >&2
+        fi
+        
+        # Copy network_map.xsd to /etc/cuems/ if it doesn't exist or is outdated
+        if [ -f "$CUEMS_VENV/network_map.xsd" ]; then
+            if [ ! -f "/etc/cuems/network_map.xsd" ] || ! cmp -s "$CUEMS_VENV/network_map.xsd" "/etc/cuems/network_map.xsd"; then
+                echo "Updating /etc/cuems/network_map.xsd from package..."
+                cp "$CUEMS_VENV/network_map.xsd" "/etc/cuems/network_map.xsd" || echo "WARNING: Failed to copy network_map.xsd" >&2
+            fi
+        fi
+        
+        # Reload systemd (service file from cuems-common)
+        if command -v deb-systemd-helper >/dev/null 2>&1; then
+            deb-systemd-helper update-state >/dev/null 2>&1 || true
+        elif command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+        fi
+        
+        echo "cuems-nodeconf installed successfully."
+        echo "Package: cuemsnodeconf installed to $CUEMS_VENV/lib/python*/site-packages/"
+        echo "Console script: $CUEMS_VENV/bin/cuems-nodeconf"
+        echo "Service file provided by cuems-common package."
+        
+        # Enable and start the service
+        if command -v systemctl >/dev/null 2>&1; then
+            if systemctl is-enabled cuems-nodeconf >/dev/null 2>&1; then
+                echo "Service cuems-nodeconf is already enabled."
+            else
+                systemctl enable cuems-nodeconf || echo "WARNING: Failed to enable cuems-nodeconf service" >&2
+            fi
+            
+            if systemctl is-active --quiet cuems-nodeconf 2>/dev/null; then
+                echo "Service cuems-nodeconf is already running."
+            else
+                systemctl start cuems-nodeconf || echo "WARNING: Failed to start cuems-nodeconf service" >&2
+            fi
+        fi
+        ;;
+        
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+        
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

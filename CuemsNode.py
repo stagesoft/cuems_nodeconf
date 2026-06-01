@@ -5,35 +5,35 @@ import enum
 
 
 
-class CuemsNodeDict(dict):
+class node_list(dict):
 
     @property
     def masters(self):
         master_list = list()
 
-        for node in super().values():
-            if node.node_type == CuemsNode.NodeType.master:
-                master_list.append(node)
+        for node_obj in super().values():
+            if node_obj.node_type == node.NodeType.master:
+                master_list.append(node_obj)
         return master_list
     @property
     def slaves(self):
         slave_list = list()
 
-        for node in super().values():
-            if node.node_type == CuemsNode.NodeType.slave:
-                slave_list.append(node)
+        for node_obj in super().values():
+            if node_obj.node_type == node.NodeType.slave:
+                slave_list.append(node_obj)
         return slave_list
         
     @property
     def firstruns(self):
         firstrun_list = list()
 
-        for node in super().values():
-            if node.node_type == CuemsNode.NodeType.firstrun:
-                firstrun_list.append(node)
+        for node_obj in super().values():
+            if node_obj.node_type == node.NodeType.firstrun:
+                firstrun_list.append(node_obj)
         return firstrun_list
         
-class CuemsNode(dict):
+class node(dict):
 
     @enum.unique
     class NodeType(enum.Enum):
@@ -72,14 +72,6 @@ class CuemsNode(dict):
         return super().__setitem__('ip', value)
 
     @property
-    def port(self):
-        return super().__getitem__('port')
-
-    @port.setter
-    def port(self, value):
-        return super().__setitem__('port', value)
-
-    @property
     def uuid(self):
         return super().__getitem__('uuid')
 
@@ -95,6 +87,26 @@ class CuemsNode(dict):
     def mac(self, value):
         return super().__setitem__('mac', value)
 
+    @property
+    def adopted(self):
+        return super().get('adopted', False)
+
+    @adopted.setter
+    def adopted(self, value):
+        return super().__setitem__('adopted', value)
+
+    @property
+    def online(self):
+        return super().get('online', False)
+
+    @online.setter
+    def online(self, value):
+        return super().__setitem__('online', value)
+
     # def __repr__(self):
     #     _dict = str({"name" : super().__getitem__('name'), "present" : super().__getitem__('present')})
     #     return _dict
+
+# Backwards compatibility aliases
+CuemsNodeDict = node_list
+CuemsNode = node

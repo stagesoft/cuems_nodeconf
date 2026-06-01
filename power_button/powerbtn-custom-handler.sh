@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-FileCopyrightText: 2026 Stagelab Coop SCCL
 # SPDX-License-Identifier: GPL-3.0-or-later
-SHOW_LOCK_FILE=/etc/cuems/show.lock
+SHOW_LOCK_FILE=/tmp/cuems.show.lock
 SERVICE_FILE=/etc/avahi/services/cuems.service
 FIRST_RUN_SERVICE_FILE=/usr/share/cuems/cuems.service.firstrun
 
@@ -20,7 +20,7 @@ retVal=$?
 
 if [ $retVal -ne 0 ]
 then
-        nohup /etc/acpi/cuems-power-button-waiter.sh &
+        nohup /etc/acpi/cuems-power-button-waiter.sh &&
         /usr/sbin/shutdown -h +1 "Power button press, Shutting down in 1 minute"
         $LOGGER_COMMAND "Power button press, Shutting down in 1 minute"
 
