@@ -5,9 +5,9 @@ import pytest
 from unittest.mock import MagicMock, patch, Mock
 import sys
 
-from CuemsNodeConf import CuemsNodeConf
-from CuemsNode import CuemsNode, CuemsNodeDict
-from CuemsAvahiListener import CuemsAvahiListener
+from cuemsnodeconf.CuemsNodeConf import CuemsNodeConf
+from cuemsnodeconf.CuemsNode import CuemsNode, CuemsNodeDict
+from cuemsnodeconf.CuemsAvahiListener import CuemsAvahiListener
 
 
 class TestIntegrationScenarios:

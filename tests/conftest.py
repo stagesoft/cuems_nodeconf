@@ -72,7 +72,7 @@ def mock_netifaces(monkeypatch):
     
     # Also patch it in any modules that might have already imported it
     # This is needed because CuemsNodeConf imports netifaces at module level
-    import CuemsNodeConf
+    from cuemsnodeconf import CuemsNodeConf
     if hasattr(CuemsNodeConf, 'netifaces'):
         monkeypatch.setattr(CuemsNodeConf, 'netifaces', MockNetifaces())
     
