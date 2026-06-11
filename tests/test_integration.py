@@ -38,7 +38,6 @@ class TestIntegrationScenarios:
         with patch('shutil.copy2'), \
              patch.object(nodeconf, 'change_network_to_master', return_value=True), \
              patch.object(nodeconf, 'get_ips'), \
-             patch.object(nodeconf, 'publish_master_alias'), \
              patch.object(nodeconf, 'write_network_map'), \
              patch.object(nodeconf, 'update_master_lock_file'), \
              patch.object(nodeconf, 'notify_systemd'):

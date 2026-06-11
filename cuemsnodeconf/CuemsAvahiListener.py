@@ -9,7 +9,6 @@ logging.basicConfig(level=logging.DEBUG,
 
 
 class CuemsAvahiListener():
-    nodes = CuemsNodeDict()
     @enum.unique
     class Action(enum.Enum):
         DELETE = 0
@@ -19,6 +18,10 @@ class CuemsAvahiListener():
     def __init__(self, ip, callback = None):
         self.ip = ip
         self.callback = callback
+        # Per-instance node table. (Was a class attribute, which shared state
+        # across every listener instance and leaked between tests; a
+        # long-running daemon must not share discovery state across restarts.)
+        self.nodes = CuemsNodeDict()
         self.logger = logging.getLogger('Avahi-listener')
 
     def get_mac(self, name):
@@ -27,8 +30,14 @@ class CuemsAvahiListener():
     def remove_service(self, zeroconf, type_, name):
         self.logger.debug(f'Service {name} removed')
 
+        # Drop the departed node from the table so the next merge pass marks it
+        # offline. Without this, merge_discovered_nodes() never sees the
+        # departure and <online> stays True forever for vanished nodes.
+        mac = self.get_mac(name)
+        removed = self.nodes.pop(mac, None)
+
         if self.callback:
-            self.callback(action=CuemsAvahiListener.Action.DELETE)
+            self.callback(removed, action=CuemsAvahiListener.Action.DELETE)
 
     def add_service(self, zeroconf, type_, name):
         ip = None
