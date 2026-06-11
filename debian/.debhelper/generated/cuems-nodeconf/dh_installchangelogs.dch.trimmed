@@ -1,0 +1,18 @@
+cuems-nodeconf (0.1.0-1) UNRELEASED; urgency=medium
+
+  * Initial Debian packaging (dh-virtualenv); console entry cuems-nodeconf in
+    the shared /usr/lib/cuems venv.
+  * Re-enable nodeconf as a long-running daemon: resident avahi discovery loop,
+    debounced network_map refresh, atomic + change-detected map writes.
+  * Drop removed cuemsutils.daemon.run_daemon; sd_notify READY=1 via a plain
+    signal-handled main() (Type=notify compatible).
+  * Interface-scoped avahi aliases via D-Bus EntryGroup.AddAddress
+    (controller.local on the cluster iface, UI alias on the outward iface);
+    skip controller.local when the OS hostname is 'controller'.
+  * Fix copy-on-serialize (node_type enum no longer mutated in place),
+    remove_service node removal, per-instance listener state, shutil.copy2 for
+    the slave template.
+  * Drop the stale in-repo network_map.xsd (runtime validates against the
+    cuems-common-shipped /etc/cuems/network_map.xsd).
+
+ -- Ion Reguera <ion@stagelab.coop>  Thu, 11 Jun 2026 19:49:46 +0200
