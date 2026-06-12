@@ -456,26 +456,53 @@ class CuemsNodeConf():
 
     def merge_discovered_nodes(self):
         Logger.debug('Merging discovered nodes with network_map')
-        discovered_macs = set(self.listener.nodes.keys())
-        
-        for mac, discovered_node in self.listener.nodes.items():
-            if mac in self.network_map:
-                existing_node = self.network_map[mac]
+        # Match discovered nodes to the existing map by UUID, the stable primary
+        # key (per the node-identity model). We must NOT key on the mac derived
+        # from the avahi service name: the controller advertises its service as
+        # 'controller' (so peers resolve controller.local), not its MAC, so
+        # get_mac() yields a garbage key ('controller._'). Keying merges on that
+        # created a DUPLICATE controller node every discovery pass and flipped
+        # the real (mac-keyed) entry to online=False, orphaning the operator
+        # fields role_id/alias/hostname.
+        existing_by_uuid = {
+            node.get('uuid'): (mac, node)
+            for mac, node in self.network_map.items()
+            if node.get('uuid')
+        }
+
+        discovered_uuids = set()
+        for _disc_key, discovered_node in self.listener.nodes.items():
+            d_uuid = discovered_node.get('uuid')
+            if d_uuid:
+                discovered_uuids.add(d_uuid)
+
+            match = existing_by_uuid.get(d_uuid)
+            if match is not None:
+                mac, existing_node = match
                 preserved_adopted = existing_node.adopted
-                self.network_map[mac].update(discovered_node)
-                self.network_map[mac].adopted = preserved_adopted
-                self.network_map[mac].online = True
-                Logger.debug(f'Merged node {mac}, preserved adopted={preserved_adopted}')
+                # Refresh mutable discovery fields (ip, name, node_type) in
+                # place but keep the real mac key and the operator fields; never
+                # clobber the real mac with the name-parse.
+                existing_node.update(
+                    {k: v for k, v in discovered_node.items() if k != 'mac'}
+                )
+                existing_node.adopted = preserved_adopted
+                existing_node.online = True
+                Logger.debug(f'Merged discovered uuid={d_uuid} into existing node {mac}, preserved adopted={preserved_adopted}')
             else:
-                self.network_map[mac] = discovered_node
-                self.network_map[mac].adopted = False
-                self.network_map[mac].online = True
-                Logger.debug(f'Added new discovered node {mac}')
-        
+                # Genuinely new node. Real slaves name their service by MAC, so
+                # the discovered key is the real mac here.
+                key = discovered_node.get('mac')
+                self.network_map[key] = discovered_node
+                self.network_map[key].adopted = False
+                self.network_map[key].online = True
+                Logger.debug(f'Added new discovered node uuid={d_uuid} key={key}')
+
+        # Offline pass keyed on UUID, not mac (same reason as above).
         for mac, node in self.network_map.items():
-            if mac not in discovered_macs:
+            if node.get('uuid') not in discovered_uuids:
                 node.online = False
-                Logger.debug(f'Node {mac} is offline')
+                Logger.debug(f'Node {mac} (uuid={node.get("uuid")}) is offline')
 
     def set_master_always_adopted(self):
         for mac, node in self.network_map.items():

@@ -29,6 +29,14 @@ IF_UNSPEC = -1
 PROTO_INET = 0
 PROTO_UNSPEC = -1
 
+# Publish ONLY the forward A record; never let avahi add the reverse PTR. A UI
+# alias (e.g. formitgo.local) shares its address with the host's own hostname
+# record (controller.local on bond0), whose reverse PTR for that IP avahi
+# already owns; a second reverse for the same address collides ("Local name
+# collision"). NO_REVERSE keeps the alias forward-only. (avahi-common/defs.h
+# AvahiPublishFlags.)
+AVAHI_PUBLISH_NO_REVERSE = 0x10
+
 ENTRY_GROUP_UNCOMMITED = 0
 ENTRY_GROUP_REGISTERING = 1
 ENTRY_GROUP_ESTABLISHED = 2
@@ -111,7 +119,7 @@ class AliasPublisher:
                 self._bus.get_object(AVAHI_DBUS_NAME, group_path),
                 AVAHI_DBUS_IFACE_ENTRY_GROUP,
             )
-            group.AddAddress(idx, PROTO_INET, dbus.UInt32(0), name, ip)
+            group.AddAddress(idx, PROTO_INET, dbus.UInt32(AVAHI_PUBLISH_NO_REVERSE), name, ip)
             group.Commit()
             self._records[name] = {'ip': ip, 'iface': ifname, 'group': group}
             Logger.info(f"AliasPublisher: published {name} -> {ip} on {ifname} (idx {idx})")

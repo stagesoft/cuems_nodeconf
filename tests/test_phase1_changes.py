@@ -132,3 +132,39 @@ def test_alias_publisher_scopes_to_interface_and_is_idempotent(monkeypatch):
     assert pub.ensure('controller.local', '169.254.9.9', 'ethernet1') is True
     assert calls['add'] == 2
     assert calls['last'][3] == '169.254.9.9'
+
+
+def test_merge_discovered_controller_does_not_duplicate(tmp_path):
+    # The controller's avahi service is named 'controller', so the listener's
+    # get_mac() derives a garbage key ('controller._'). merge_discovered_nodes
+    # must match the existing master entry by UUID and update it in place — NOT
+    # create a duplicate node nor flip the real (mac-keyed) node offline. This
+    # pins the corruption a live smoke test surfaced on the controller.
+    nc = _master_nodeconf(tmp_path)  # map: mac=aabbccddeeff, uuid=u-master
+
+    listener = CuemsAvahiListener(ip='169.254.0.1')
+    listener.nodes['controller._'] = CuemsNode({
+        'uuid': 'u-master',                       # same uuid as the map entry
+        'mac': 'controller._',                    # garbage key from the name
+        'name': 'controller._cuems_nodeconf._tcp.local.',
+        'node_type': CuemsNode.NodeType.master,
+        'ip': '169.254.99.99',                    # renegotiated IPv4LL
+        'adopted': False,
+        'online': True,
+    })
+    nc.listener = listener
+
+    nc.merge_discovered_nodes()
+
+    # Exactly one node, still keyed by the REAL mac.
+    assert list(nc.network_map.keys()) == ['aabbccddeeff']
+    node = nc.network_map['aabbccddeeff']
+    # Operator fields preserved.
+    assert node.get('role_id') == 'controller'
+    assert node.get('alias') == 'Controller'
+    assert node.get('hostname') == 'controller'
+    # Discovery refreshed the ip and kept it online/adopted; enum intact.
+    assert node.get('ip') == '169.254.99.99'
+    assert node.online is True
+    assert node.adopted is True
+    assert node.node_type is CuemsNode.NodeType.master

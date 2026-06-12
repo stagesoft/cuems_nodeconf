@@ -20,47 +20,23 @@ override_dh_auto_clean:
 override_dh_fixperms:
 	# Remove .gitignore files installed by dh_virtualenv
 	find debian/cuems-nodeconf -name ".gitignore" -delete
-	# Remove virtualenv infrastructure (provided by cuems-utils)
-	find debian/cuems-nodeconf/usr/lib/cuems/bin -name "activate*" -delete
-	find debian/cuems-nodeconf/usr/lib/cuems/bin -name "pip*" -delete
-	find debian/cuems-nodeconf/usr/lib/cuems/bin -name "python*" -delete
-	find debian/cuems-nodeconf/usr/lib/cuems/bin -name "wheel*" -delete
+	# The venv bin/ must ship ONLY our entry point. Everything else (activate,
+	# pip, python, wheel, AND dependency-provided console scripts such as
+	# peewee's pwiz.py) is already provided by the cuems-utils venv and would
+	# file-conflict with that package at dpkg install time. Strip all but
+	# cuems-nodeconf.
+	find debian/cuems-nodeconf/usr/lib/cuems/bin -mindepth 1 -not -name 'cuems-nodeconf' -delete
 	rm -f debian/cuems-nodeconf/usr/lib/cuems/pyvenv.cfg
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/_virtualenv.*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/_distutils_hack
-	# Remove cuemsutils + transitive deps (provided by the cuems-utils package)
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/cuemsutils*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/aiofiles*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/cffi*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/deprecated*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/Deprecated*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/elementpath*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/json_fix*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/lxml*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/peewee*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/playhouse
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/pycparser*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/pynng*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/sniffio*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/timecode*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/websockets*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/wrapt*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/xmlschema*
-	# Remove system-provided packages exposed via --use-system-packages
-	# (netifaces, dbus, zeroconf, systemd) so we don't ship private copies.
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/netifaces*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/dbus*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/zeroconf*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/ifaddr*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/systemd*
-	# Remove pip/setuptools/wheel (provided by cuems-utils)
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/pip*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/setuptools*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/wheel*
-	rm -rf debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages/pkg_resources
-	# Remove .so files (Python C extensions belong to system Debian packages)
-	find debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages -name "*.so" -delete
-	find debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages -name "*.pth" -delete
+	# site-packages must ship ONLY our own package. dh_virtualenv stages every
+	# dependency (cuemsutils, peewee + its standalone pwiz.py straggler,
+	# playhouse, lxml, pynng, dbus, zeroconf, systemd, pip/setuptools/wheel,
+	# *.so, *.pth, ...) but all of those are provided by the cuems-utils venv and
+	# the python3-* system packages we Depend on. Shipping private copies
+	# file-conflicts with cuems-utils at dpkg install time (pwiz.py was the
+	# canary). Strip everything except cuemsnodeconf* — robust against new
+	# stragglers, unlike an allow-list of dep names.
+	find debian/cuems-nodeconf/usr/lib/cuems/lib/python3.11/site-packages \
+		-mindepth 1 -maxdepth 1 -not -name 'cuemsnodeconf*' -exec rm -rf {} +
 	# Remove __pycache__ from installed tree
 	find debian/cuems-nodeconf -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
 	find debian/cuems-nodeconf -name '*.pyc' -delete
