@@ -34,11 +34,6 @@ NODE_INTERFACES_TEMPLATE = 'interfaces.node'
 MASTER_ALIAS='controller.local'
 CONTROLLER_ALIAS='formitgo.local'
 
-'''
-Logger.basicConfig(level=Logger.DEBUG,
-                    format='%(name)s: %(message)s',
-                    )
-'''
 
 class CuemsNodeConf():
 

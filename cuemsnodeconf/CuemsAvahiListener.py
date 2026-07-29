@@ -1,11 +1,15 @@
 from .CuemsNode import CuemsNodeDict, CuemsNode
 import enum
-import logging
 
+from cuemsutils.log import main_logger
 
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(name)s: %(message)s',
-                    )
+# NOTE: this module used to call logging.basicConfig() at import time and hang
+# its 'Avahi-listener' logger off the root handler that call installed. Since
+# cuemsutils.log seeds the root logger with a NullHandler (to stop third-party
+# import-time logging from re-emitting every record in BASIC_FORMAT), that
+# basicConfig became a no-op and the listener's output went nowhere. The logger
+# now comes from cuemsutils.main_logger like every other module in this
+# package, which handles systemd vs terminal output and real syslog priorities.
 
 
 class CuemsAvahiListener():
@@ -22,7 +26,7 @@ class CuemsAvahiListener():
         # across every listener instance and leaked between tests; a
         # long-running daemon must not share discovery state across restarts.)
         self.nodes = CuemsNodeDict()
-        self.logger = logging.getLogger('Avahi-listener')
+        self.logger = main_logger('Avahi-listener')
 
     def get_mac(self, name):
         return name[:12]
