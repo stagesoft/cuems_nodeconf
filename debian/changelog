@@ -1,3 +1,14 @@
+cuems-nodeconf (0.1.0-7) unstable; urgency=medium
+
+  * Route Avahi-listener/ConfServer through cuemsutils.log: drop the
+    import-time basicConfig that cuemsutils' root NullHandler seed had
+    turned into a no-op (the listener's discovery output went nowhere
+    under systemd) and that, in other import orders, re-armed the
+    duplicate-logging bug. Delete the dead Logger.basicConfig block in
+    CuemsNodeConf.
+
+ -- Ion Reguera <ion@stagelab.coop>  Wed, 29 Jul 2026 19:45:07 +0200
+
 cuems-nodeconf (0.1.0-6) unstable; urgency=medium
 
   * Fix a controller-engine crash-loop introduced by enabling nodeconf: the
