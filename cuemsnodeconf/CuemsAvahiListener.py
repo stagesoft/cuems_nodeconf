@@ -1,7 +1,11 @@
-from .CuemsNode import CuemsNodeDict, CuemsNode
 import enum
 
 from cuemsutils.log import main_logger
+# Aliased: this module (like the rest of the package) uses `node` pervasively
+# as a loop/local variable name, which would shadow the class import within
+# any function that also assigns to a local called `node`.
+from cuemsutils.tools.NodeList import NodeIndex, NodeRole
+from cuemsutils.tools.NodeList import node as Node
 
 # NOTE: this module used to call logging.basicConfig() at import time and hang
 # its 'Avahi-listener' logger off the root handler that call installed. Since
@@ -10,6 +14,19 @@ from cuemsutils.log import main_logger
 # basicConfig became a no-op and the listener's output went nowhere. The logger
 # now comes from cuemsutils.main_logger like every other module in this
 # package, which handles systemd vs terminal output and real syslog priorities.
+
+# feature 007: the Avahi TXT record itself is UNCHANGED — its key is still
+# 'node_type' and its value is still the legacy master/slave/firstrun
+# spelling (deferred to feature 008, spec Assumption 10; see cuems-common's
+# etc/avahi/services and usr/share/cuems/cuems.service.* templates). What
+# changes here is the *model* built from that wire value: every discovered
+# node becomes a cuemsutils node carrying node_role (a NodeRole), not
+# node_type (a string). This is the one place that boundary is crossed.
+_AVAHI_NODE_TYPE_TO_ROLE = {
+    'master': NodeRole.controller,
+    'slave': NodeRole.node,
+    'firstrun': NodeRole.firstrun,
+}
 
 
 class CuemsAvahiListener():
@@ -25,7 +42,7 @@ class CuemsAvahiListener():
         # Per-instance node table. (Was a class attribute, which shared state
         # across every listener instance and leaked between tests; a
         # long-running daemon must not share discovery state across restarts.)
-        self.nodes = CuemsNodeDict()
+        self.nodes = NodeIndex()
         self.logger = main_logger('Avahi-listener')
 
     def get_mac(self, name):
@@ -80,7 +97,13 @@ class CuemsAvahiListener():
                 self.logger.error(f'Missing node_type property for service {name}')
                 return
             
-            node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")] , 'ip' : ip, 'adopted': False, 'online': True})
+            raw_role = info.properties[b'node_type'].decode("utf-8")
+            node_role = _AVAHI_NODE_TYPE_TO_ROLE.get(raw_role)
+            if node_role is None:
+                self.logger.error(f"Unrecognised node_type {raw_role!r} in service {name}; accepted: {sorted(_AVAHI_NODE_TYPE_TO_ROLE)}")
+                return
+
+            node = Node(uuid=info.properties[b"uuid"].decode("utf-8"), mac=self.get_mac(name), name=name, node_role=node_role, ip=ip, adopted=False, online=True)
             try:
                 self.nodes[self.get_mac(name)].update(node)
             except KeyError:
@@ -126,7 +149,13 @@ class CuemsAvahiListener():
                 self.logger.error(f'Missing node_type property for service {name}')
                 return
             
-            node = CuemsNode({ 'uuid' : info.properties[b"uuid"].decode("utf-8"), 'mac' : self.get_mac(name), 'name' : name, 'node_type': CuemsNode.NodeType[info.properties[b'node_type'].decode("utf-8")], 'ip' : ip, 'adopted': False, 'online': True})
+            raw_role = info.properties[b'node_type'].decode("utf-8")
+            node_role = _AVAHI_NODE_TYPE_TO_ROLE.get(raw_role)
+            if node_role is None:
+                self.logger.error(f"Unrecognised node_type {raw_role!r} in service {name}; accepted: {sorted(_AVAHI_NODE_TYPE_TO_ROLE)}")
+                return
+
+            node = Node(uuid=info.properties[b"uuid"].decode("utf-8"), mac=self.get_mac(name), name=name, node_role=node_role, ip=ip, adopted=False, online=True)
             self.nodes[self.get_mac(name)].update(node)
             self.logger.debug(f'Service {name} updated, service info: {info}')
 

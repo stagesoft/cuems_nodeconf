@@ -11,13 +11,20 @@ import shutil
 from zeroconf import IPVersion, ServiceInfo, ServiceListener, ServiceBrowser, Zeroconf, ZeroconfServiceTypes
 
 from .CuemsAvahiListener import CuemsAvahiListener
-from .CuemsNode import CuemsNode, CuemsNodeDict
-from . import NodeXmlBuilders  # Register custom XML builders for node_list and node
 
-from cuemsutils.xml.XmlReaderWriter import XmlReader, XmlWriter
+# feature 007: the node model lives in cuemsutils now — see
+# specs/007-node-model-migration/migration-guide.md in cuems-utils for the
+# full moved-symbol table. `node` is aliased because this module (like the
+# rest of the package) uses `node` pervasively as a loop/local variable name.
+from cuemsutils.tools.NodeList import NodeIndex, NodeRole
+from cuemsutils.tools.NodeList import node as Node
+from cuemsutils.config.network_map import CuemsNetworkMapType
+from cuemsutils.xml.mapper import Mapper, read_config_document
+from cuemsutils.xml.settings import NetworkMap as _NetworkMapReader
+from cuemsutils.errors import SchemaError
+
 from cuemsutils.timeoutloop import Timeoutloop
 from cuemsutils.log import Logger, logged
-from cuemsutils.helpers import strtobool
 from .communicate import AsyncCommsThread, TIMEOUT
 import asyncio
 
@@ -40,7 +47,7 @@ class CuemsNodeConf():
     def __init__(self):
         self.xsd_path = os.path.join( CUEMS_CONF_PATH, MAP_SCHEMA_FILE)
         self.map_path = os.path.join( CUEMS_CONF_PATH, MAP_FILE)
-        self.network_map = CuemsNodeDict()
+        self.network_map = NodeIndex()
 
         self.services = ['_cuems_nodeconf._tcp.local.']
 
@@ -154,7 +161,7 @@ class CuemsNodeConf():
             self.read_network_map()
         else:
             Logger.debug('No existing network_map.xml found, starting fresh')
-            self.network_map = CuemsNodeDict()
+            self.network_map = NodeIndex()
 
         self.zeroconf = Zeroconf(interfaces=[self.ip],ip_version=IPVersion.V4Only)
 
@@ -175,7 +182,7 @@ class CuemsNodeConf():
             sys.exit(-1)
 
         # Check for first run flag in service file
-        if self.node.node_type == CuemsNode.NodeType.firstrun:
+        if self.node['node_role'] == NodeRole.firstrun:
             if self._should_resume_master():
                 # This host was the controller before (master.lock present, or
                 # the existing network_map already records this node as master).
@@ -184,28 +191,28 @@ class CuemsNodeConf():
                 # is assumed already in master configuration (do NOT restart
                 # networking on a resume — that is disruptive and unnecessary).
                 Logger.info('Resuming master role from existing state (skipping firstrun election)')
-                self.node.node_type = CuemsNode.NodeType.master
+                self.node['node_role'] = NodeRole.controller
                 self._install_master_service_template()
             else:
                 Logger.debug("First time conf file detected, triying to autoconfigure node")
-                self.set_node_type()
+                self.set_node_role()
         else:
-            Logger.debug(f"Allready configured as {self.node.node_type.name}")
-        
+            Logger.debug(f"Allready configured as {self.node['node_role'].name}")
+
         # If I am master, give slaves a moment to appear before the first pass.
-        if self.node.node_type == CuemsNode.NodeType.master:
+        if self.node['node_role'] == NodeRole.controller:
             time.sleep(5)
         self.publish_aliases_if_master()
 
-        if self.listener.nodes.firstruns:
+        if self.listener.nodes.by_role(NodeRole.firstrun):
             Logger.debug('Waiting for some other "first-run" nodes')
         # Add timeout to prevent infinite loop
         max_iterations = 60  # 30 seconds max (60 * 0.5)
         iteration = 0
-        while self.listener.nodes.firstruns and iteration < max_iterations:
+        while self.listener.nodes.by_role(NodeRole.firstrun) and iteration < max_iterations:
             time.sleep(0.5)
             iteration += 1
-        if iteration >= max_iterations and self.listener.nodes.firstruns:
+        if iteration >= max_iterations and self.listener.nodes.by_role(NodeRole.firstrun):
             Logger.warning('Timeout waiting for firstrun nodes to resolve. Continuing anyway.')
 
         self.check_nodes()
@@ -276,10 +283,10 @@ class CuemsNodeConf():
         sig = []
         for mac in sorted(nmap.keys()):
             node = nmap[mac]
-            nt = node.get('node_type')
-            nt = nt.name if hasattr(nt, 'name') else str(nt)
+            role = node.get('node_role')
+            role = role.name if hasattr(role, 'name') else str(role)
             sig.append((
-                mac, node.get('uuid'), nt, node.get('ip'),
+                mac, node.get('uuid'), role, node.get('ip'),
                 bool(node.get('adopted', False)), bool(node.get('online', False)),
                 node.get('role_id'), node.get('alias'), node.get('hostname'),
             ))
@@ -343,8 +350,8 @@ class CuemsNodeConf():
             Logger.debug('master.lock present -> resume master')
             return True
         try:
-            own = self.network_map.get(self.node.mac)
-            if own is not None and own.node_type == CuemsNode.NodeType.master:
+            own = self.network_map.get(self.node['mac'])
+            if own is not None and own.get('node_role') == NodeRole.controller:
                 Logger.debug('existing network_map records this node as master -> resume master')
                 return True
         except Exception:
@@ -368,17 +375,17 @@ class CuemsNodeConf():
             Logger.exception(e)
             raise
 
-    def set_node_type(self):
-        if not self.listener.nodes.masters:
+    def set_node_role(self):
+        if not self.listener.nodes.controllers:
             Logger.debug('No master node on the network, I become MASTER!')
-            self.node.node_type = CuemsNode.NodeType.master
+            self.node['node_role'] = NodeRole.controller
 
             self._install_master_service_template()
 
             if not self.change_network_to_master():
                 Logger.error("Failed to change network to master configuration")
                 raise RuntimeError("Network configuration change failed")
-            
+
             try:
                 self.get_ips()
             except TimeoutError:
@@ -386,7 +393,7 @@ class CuemsNodeConf():
                 raise
         else:
             Logger.debug('Master present on the in network WE STAY SLAVE')
-            self.node.node_type = CuemsNode.NodeType.slave
+            self.node['node_role'] = NodeRole.node
 
             # Copy slave node service template. nodeconf runs as root, so a
             # direct copy is correct here — the old `sudo cp` shelled out
@@ -407,46 +414,27 @@ class CuemsNodeConf():
         if not map:
             map = self.network_map if hasattr(self, 'network_map') and self.network_map else self.listener.nodes
 
-        # Build a SEPARATE serialization map. We must not mutate the live nodes:
-        # converting node_type enum -> str in place broke later enum comparisons
-        # (set_master_always_adopted / unadopt_node's master guard) after the
-        # first write. Unknown-to-nodeconf fields (role_id, alias, hostname set
-        # by operators) are copied through verbatim so a rewrite never drops them.
-        required_fields = ['uuid', 'mac', 'name', 'node_type', 'ip']
-        serializable = CuemsNodeDict()
+        required_fields = ['uuid', 'mac', 'name', 'node_role', 'ip']
         for mac, node in map.items():
             for field in required_fields:
                 if node.get(field) is None:
                     Logger.error(f"Node {mac} has None value for required field '{field}'. Node data: {dict(node)}")
                     raise ValueError(f"Cannot write network map: Node {mac} has None value for required field '{field}'")
 
-            snode = CuemsNode(dict(node))  # shallow copy; live node untouched
-
-            # node_type -> "NodeType.<name>" string for cuems-engine compatibility.
-            nt = snode.get('node_type')
-            if hasattr(nt, 'name'):
-                snode['node_type'] = f"NodeType.{nt.name}"
-
-            # Normalize adopted/online to bool (XmlWriter renders BoolType).
-            for boolfield in ('adopted', 'online'):
-                val = snode.get(boolfield)
-                if val is None:
-                    snode[boolfield] = False
-                elif isinstance(val, str):
-                    try:
-                        snode[boolfield] = strtobool(val)
-                    except ValueError:
-                        snode[boolfield] = False
-
-            serializable[mac] = snode
-
-        # Atomic write: render to a temp file in the same dir, then os.replace
-        # so a concurrent reader (engine/editor at restart) never sees a
-        # half-written map.
-        tmp_path = f"{self.map_path}.tmp.{os.getpid()}"
-        writer = XmlWriter(schema_name = self.xsd_path, xmlfile = tmp_path, xml_root_tag='CuemsNetworkMap')
-        writer.write_from_object(serializable)
-        os.replace(tmp_path, self.map_path)
+        # feature 007 (T076): CuemsNetworkMapType.save() validates (T1) then
+        # writes atomically (documents.build_tree / iter_schema_errors /
+        # write_tree — a temp file in the same directory, then os.replace) and
+        # does not mutate the object it is given (contract C5, FR-015). The
+        # hand-rolled atomic write and the separate serialization copy this
+        # replaced existed only to work around a mutation bug in the old
+        # builder (converting node_type -> str in place broke later enum
+        # comparisons) — that workaround has nothing left to work around.
+        netmap = CuemsNetworkMapType(node_list=[{"node": n} for n in map.values()])
+        try:
+            netmap.save(self.map_path)
+        except SchemaError as e:
+            Logger.error(f"Network map failed validation: {e}")
+            raise
         Logger.debug("Network map written to XML (atomic)")
 
     def merge_discovered_nodes(self):
@@ -474,126 +462,114 @@ class CuemsNodeConf():
             match = existing_by_uuid.get(d_uuid)
             if match is not None:
                 mac, existing_node = match
-                preserved_adopted = existing_node.adopted
-                # Refresh mutable discovery fields (ip, name, node_type) in
+                preserved_adopted = existing_node.get('adopted', False)
+                # Refresh mutable discovery fields (ip, name, node_role) in
                 # place but keep the real mac key and the operator fields; never
                 # clobber the real mac with the name-parse.
                 existing_node.update(
                     {k: v for k, v in discovered_node.items() if k != 'mac'}
                 )
-                existing_node.adopted = preserved_adopted
-                existing_node.online = True
+                existing_node['adopted'] = preserved_adopted
+                existing_node['online'] = True
                 Logger.debug(f'Merged discovered uuid={d_uuid} into existing node {mac}, preserved adopted={preserved_adopted}')
             else:
                 # Genuinely new node. Real slaves name their service by MAC, so
                 # the discovered key is the real mac here.
                 key = discovered_node.get('mac')
                 self.network_map[key] = discovered_node
-                self.network_map[key].adopted = False
-                self.network_map[key].online = True
+                self.network_map[key]['adopted'] = False
+                self.network_map[key]['online'] = True
                 Logger.debug(f'Added new discovered node uuid={d_uuid} key={key}')
 
         # Offline pass keyed on UUID, not mac (same reason as above).
         for mac, node in self.network_map.items():
             if node.get('uuid') not in discovered_uuids:
-                node.online = False
+                node['online'] = False
                 Logger.debug(f'Node {mac} (uuid={node.get("uuid")}) is offline')
 
     def set_master_always_adopted(self):
         for mac, node in self.network_map.items():
-            if node.node_type == CuemsNode.NodeType.master:
-                node.adopted = True
+            if node.get('node_role') == NodeRole.controller:
+                node['adopted'] = True
                 Logger.debug(f'Set master node {mac} as always adopted')
-        
+
         if self.is_first_run:
             for mac, node in self.network_map.items():
-                if node.node_type != CuemsNode.NodeType.master:
-                    node.adopted = False
+                if node.get('node_role') != NodeRole.controller:
+                    node['adopted'] = False
 
     def check_missing_adopted_nodes(self):
-        adopted_nodes = [node for node in self.network_map.values() if node.adopted]
-        discovered_uuids = {node.uuid for node in self.listener.nodes.values()}
-        
+        adopted_nodes = [node for node in self.network_map.values() if node.get('adopted')]
+        discovered_uuids = {node.get('uuid') for node in self.listener.nodes.values()}
+
         missing_adopted = []
         for node in adopted_nodes:
-            if node.uuid not in discovered_uuids:
+            if node.get('uuid') not in discovered_uuids:
                 missing_adopted.append(node)
-        
+
         if missing_adopted:
-            Logger.warning(f'Missing adopted nodes: {[f"{n.name} ({n.uuid})" for n in missing_adopted]}')
+            labels = [f"{n.get('name')} ({n.get('uuid')})" for n in missing_adopted]
+            Logger.warning(f'Missing adopted nodes: {labels}')
         else:
             Logger.debug('All adopted nodes are present')
 
     def adopt_node(self, node_uuid):
         for node in self.network_map.values():
-            if node.uuid == node_uuid:
+            if node.get('uuid') == node_uuid:
                 # Check if node is already adopted
-                if node.adopted:
+                if node.get('adopted'):
                     Logger.debug(f'Node {node_uuid} is already adopted')
                     return {'OK': True, 'message': 'Node already adopted'}
-                
+
                 # Check if node is online
-                if not node.online:
+                if not node.get('online'):
                     Logger.warning(f'Cannot adopt node {node_uuid}: node is offline')
                     return {'OK': False, 'error': f'Cannot adopt node {node_uuid}: node is offline'}
-                
-                node.adopted = True
+
+                node['adopted'] = True
                 self.write_network_map(self.network_map)
                 Logger.info(f'Node {node_uuid} adopted')
                 return {'OK': True}
-        
+
         Logger.warning(f'Node {node_uuid} not found in network_map')
         return {'OK': False, 'error': f'Node {node_uuid} not found'}
 
     def unadopt_node(self, node_uuid):
         for node in self.network_map.values():
-            if node.uuid == node_uuid:
-                if node.node_type == CuemsNode.NodeType.master:
+            if node.get('uuid') == node_uuid:
+                if node.get('node_role') == NodeRole.controller:
                     Logger.warning(f'Cannot unadopt master node {node_uuid}')
                     return {'OK': False, 'error': 'Cannot unadopt master node'}
-                
+
                 # Check if node is already unadopted
-                if not node.adopted:
+                if not node.get('adopted'):
                     Logger.debug(f'Node {node_uuid} is already unadopted')
                     return {'OK': True, 'message': 'Node already unadopted'}
-                
+
                 # Note: Offline nodes can and should be unadoptable
                 # This allows cleaning up nodes that have gone offline
-                if not node.online:
+                if not node.get('online'):
                     Logger.info(f'Unadopting offline node {node_uuid} (node is not online)')
-                
-                node.adopted = False
+
+                node['adopted'] = False
                 self.write_network_map(self.network_map)
                 Logger.info(f'Node {node_uuid} unadopted')
                 return {'OK': True}
-        
+
         Logger.warning(f'Node {node_uuid} not found in network_map')
         return {'OK': False, 'error': f'Node {node_uuid} not found'}
 
     def read_network_map(self):
-        reader = XmlReader(schema_name = self.xsd_path, xmlfile = self.map_path)
-        self.network_map = CuemsNodeDict()
-        nodes = reader.read_to_objects()
-        for node in nodes:
-            # Normalize node_type - handle both "master" and "NodeType.master" formats
-            if 'node_type' in node:
-                node_type_str = str(node['node_type'])
-                # Remove "NodeType." prefix if present
-                if node_type_str.startswith('NodeType.'):
-                    node_type_str = node_type_str.replace('NodeType.', '')
-                # Convert to enum
-                try:
-                    node['node_type'] = CuemsNode.NodeType[node_type_str]
-                except KeyError:
-                    Logger.error(f"Invalid node_type '{node_type_str}' for node {node.get('mac', 'unknown')}")
-                    # Default to slave if invalid
-                    node['node_type'] = CuemsNode.NodeType.slave
-            
-            # Note: Boolean fields are already parsed by CuemsParser using strtobool
-            # No additional conversion needed - they come as Python bool from read_to_objects()
-            
-            self.network_map[node.mac] = node
-        
+        # feature 007 (T075): both legacy node_type spellings are gone after
+        # the postinst conversion (cuems-common M3) — network_map's own
+        # adapter table now decodes node_role straight to NodeRole (R1), so
+        # there is nothing left to normalise here.
+        reader = _NetworkMapReader(self.map_path)
+        self.network_map = NodeIndex()
+        for node_item in reader.get_dict().get('node_list', []) or []:
+            node = node_item.get('node') if isinstance(node_item, dict) else node_item
+            self.network_map[node['mac']] = node
+
         Logger.debug("---")
         Logger.debug("Nodes read from existing XML network map:")
         for item, value in self.network_map.items():
@@ -613,20 +589,22 @@ class CuemsNodeConf():
 
     def check_nodes(self):
         # Logger.debug(self.listener.nodes)
-        if self.listener.nodes.masters:
-            Logger.debug(f"Master node(s):\n{self.listener.nodes.masters}")
+        controllers = self.listener.nodes.controllers
+        if controllers:
+            Logger.debug(f"Controller node(s):\n{controllers}")
         else:
-            Logger.debug(f"We have no MASTER!! yet? waiting for it")
-        if self.listener.nodes.slaves:
+            Logger.debug(f"We have no controller!! yet? waiting for it")
+        plain_nodes = self.listener.nodes.by_role(NodeRole.node)
+        if plain_nodes:
             Logger.debug(
-                f"We have {len(self.listener.nodes.slaves)} slaves")
-            Logger.debug(f"Slave node(s):\n{self.listener.nodes.slaves}")
+                f"We have {len(plain_nodes)} nodes")
+            Logger.debug(f"Node(s):\n{plain_nodes}")
         else:
-            Logger.debug("we have no slaves")
+            Logger.debug("we have no nodes")
 
     def check_first_run(self):
-        for node in self.listener.nodes.firstruns:
-            if node.ip == self.ip:
+        for node in self.listener.nodes.by_role(NodeRole.firstrun):
+            if node.get('ip') == self.ip:
                 return True
 
         return False
@@ -638,8 +616,8 @@ class CuemsNodeConf():
         """
         for passed in Timeoutloop(timeout=5, interval=0.2):
             for node in self.listener.nodes.values():
-                if node.ip == self.ip:
-                    Logger.debug(f'Local service registered and discovered: {node.name}')
+                if node.get('ip') == self.ip:
+                    Logger.debug(f"Local service registered and discovered: {node.get('name')}")
                     return
             
             Logger.debug("Waiting for local service to be registered...")
@@ -650,7 +628,7 @@ class CuemsNodeConf():
     def retreive_local_node(self):
         for passed in Timeoutloop(timeout=10, interval=1):
             for node in self.listener.nodes.values():
-                if node.ip == self.ip:
+                if node.get('ip') == self.ip:
                     return node
 
             Logger.debug("waiting for local node to appear on the network")
@@ -684,7 +662,7 @@ class CuemsNodeConf():
         flood the record onto every interface.
         """
         node = getattr(self, 'node', None)
-        if node is None or node.node_type != CuemsNode.NodeType.master:
+        if node is None or node.get('node_role') != NodeRole.controller:
             return
 
         if self.alias_publisher is None:
@@ -709,7 +687,7 @@ class CuemsNodeConf():
             Logger.debug('No UI alias configured; skipping UI alias publication')
 
     def update_master_lock_file(self, path):
-        if self.node.node_type == CuemsNode.NodeType.master:
+        if self.node.get('node_role') == NodeRole.controller:
             if  not os.path.isfile(path):
                 try:
                     with open(path, 'a') as results_file:
