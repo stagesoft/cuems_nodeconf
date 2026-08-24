@@ -4,27 +4,27 @@ Tests for engine callback functionality.
 import pytest
 from unittest.mock import MagicMock, patch
 from cuemsnodeconf.CuemsNodeConf import CuemsNodeConf
-from cuemsnodeconf.CuemsNode import CuemsNode, CuemsNodeDict
+from cuemsutils.tools.NodeList import NodeIndex, NodeRole, node as Node
 
 
 class TestEngineCallback:
     """Test engine callback functionality."""
-    
+
     def test_engine_callback_adopt_node(self, tmp_path, monkeypatch):
         """Test engine callback for adopting a node."""
         nodeconf = CuemsNodeConf()
-        nodeconf.network_map = CuemsNodeDict()
+        nodeconf.network_map = NodeIndex()
         nodeconf.map_path = str(tmp_path / 'network_map.xml')
-        
+
         # Add a node to network_map
-        node = CuemsNode({
-            'uuid': 'test-uuid-123',
-            'mac': 'testmac123456',
-            'name': 'test_node',
-            'node_type': CuemsNode.NodeType.slave,
-            'ip': '192.168.1.10',
-            'adopted': False
-        })
+        node = Node(
+            uuid='test-uuid-123',
+            mac='testmac123456',
+            name='test_node',
+            node_role=NodeRole.node,
+            ip='192.168.1.10',
+            adopted=False,
+        )
         nodeconf.network_map['testmac123456'] = node
         
         # Create mock context
@@ -52,9 +52,9 @@ class TestEngineCallback:
     def test_engine_callback_unadopt_node(self, tmp_path, monkeypatch):
         """Test engine callback for unadopting a node."""
         nodeconf = CuemsNodeConf()
-        nodeconf.network_map = CuemsNodeDict()
+        nodeconf.network_map = NodeIndex()
         nodeconf.map_path = str(tmp_path / 'network_map.xml')
-        
+
         # Create mock context and thread
         mock_context = MagicMock()
         nodeconf.communications_thread = MagicMock()

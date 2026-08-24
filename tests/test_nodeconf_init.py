@@ -3,18 +3,18 @@ Tests for CuemsNodeConf initialization and basic setup.
 """
 import pytest
 from cuemsnodeconf.CuemsNodeConf import CuemsNodeConf
-from cuemsnodeconf.CuemsNode import CuemsNodeDict
+from cuemsutils.tools.NodeList import NodeIndex
 
 
 class TestNodeConfInitialization:
     """Test CuemsNodeConf initialization and basic setup."""
-    
+
     def test_initialization(self):
         """Test that CuemsNodeConf initializes correctly."""
         nodeconf = CuemsNodeConf()
-        
+
         assert nodeconf.network_map is not None
-        assert isinstance(nodeconf.network_map, CuemsNodeDict)
+        assert isinstance(nodeconf.network_map, NodeIndex)
         assert nodeconf.services == ['_cuems_nodeconf._tcp.local.']
         assert hasattr(nodeconf, 'map_path')
         assert hasattr(nodeconf, 'xsd_path')

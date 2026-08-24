@@ -2,7 +2,41 @@
 Pytest configuration and shared fixtures for cuems-nodeconf tests.
 """
 import sys
+import types
+from unittest.mock import MagicMock
+
 import pytest
+
+# Patch dbus BEFORE any imports that might use it (feature 007, T067-T079).
+#
+# dbus-python is a compiled extension (dbus-gmain, built against libdbus-1)
+# that a pyenv-managed dev interpreter typically cannot import without
+# libdbus-1-dev installed and a from-source build — a real dependency on a
+# packaged node (via dh_virtualenv --use-system-packages, see pyproject.toml),
+# absent in a plain dev checkout. CuemsNodeConf.py's only use of it is
+# SystemBus()/Interface()/exceptions.DBusException around systemd unit
+# management (~line 730) — not exercised by the node-model tests this
+# feature adds — so a minimal stub unblocks importing the module at all
+# without needing the real binding. DBusException must be a real exception
+# type (not a MagicMock) because `except dbus.exceptions.DBusException` is
+# only legal Python if the caught object is a *class* deriving from
+# BaseException.
+if 'dbus' not in sys.modules:
+    _dbus_stub = types.ModuleType('dbus')
+    _dbus_stub.SystemBus = MagicMock(name='dbus.SystemBus')
+    _dbus_stub.Interface = MagicMock(name='dbus.Interface')
+    # AliasPublisher.ensure() wraps a flags int in dbus.UInt32 before the
+    # D-Bus call; the real type is an int subclass, so plain int stands in.
+    _dbus_stub.UInt32 = int
+    _dbus_exceptions_stub = types.ModuleType('dbus.exceptions')
+
+    class DBusException(Exception):
+        pass
+
+    _dbus_exceptions_stub.DBusException = DBusException
+    _dbus_stub.exceptions = _dbus_exceptions_stub
+    sys.modules['dbus'] = _dbus_stub
+    sys.modules['dbus.exceptions'] = _dbus_exceptions_stub
 
 # Patch netifaces BEFORE any imports that might use it
 # This needs to happen at module load time, not in a fixture
