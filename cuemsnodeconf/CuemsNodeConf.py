@@ -51,6 +51,13 @@ class CuemsNodeConf():
         self._dirty = threading.Event()
         # Signature of the last map we wrote, so we only rewrite /etc on change.
         self._last_map_sig = None
+        # Serializes mutate+write of self.network_map. Two threads reach it: the
+        # main worker loop (avahi events / the 30 s tick) and the comms thread
+        # (adopt/unadopt over /tmp/nodeconf.ipc). Both render through the SAME
+        # temp path (map.tmp.<pid>) before os.replace, so without this lock two
+        # concurrent writers can clobber that file and promote a truncated map
+        # that neither the engine nor the editor can load.
+        self._map_lock = threading.RLock()
         # Lazily-created collaborators (so stop() can tear them down safely).
         self.communications_thread = None
         self.zeroconf = None
@@ -104,6 +111,15 @@ class CuemsNodeConf():
         self.communications_thread.start()
 
     def engine_callback(self, message, context):
+        """Handle one request from the engine over /tmp/nodeconf.ipc.
+
+        EVERY path must answer. This is an NNG Req/Rep socket: a request we
+        return from without responding leaves the engine blocked until its own
+        15 s timeout, which surfaces to the operator as an unexplained stall.
+        Before the else-branch below, any well-formed message carrying an action
+        other than 'nodelist_modify' fell off the end of the if and did exactly
+        that.
+        """
         try:
             action = message.get('action')
             if action == 'nodelist_modify':
@@ -126,6 +142,15 @@ class CuemsNodeConf():
                     self.communications_thread.event_loop
                 )
                 return
+
+            Logger.warning(f'Unknown action from engine: {action!r}')
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.respond_to_engine(
+                    {'OK': False, 'error': f'unknown action: {action}'}, context
+                ),
+                self.communications_thread.event_loop
+            )
+            return
         except Exception as e:
             Logger.error(f'Error in engine_callback: {e}')
             Logger.exception(e)
@@ -220,23 +245,29 @@ class CuemsNodeConf():
         self._run_worker_loop()
 
     def refresh_network_map(self):
-        """Merge discovery into the map; write to /etc only if content changed."""
-        self.merge_discovered_nodes()
-        self.set_master_always_adopted()
-        self.check_missing_adopted_nodes()
-        sig = self._map_signature(self.network_map)
-        if sig == self._last_map_sig:
-            Logger.debug('network_map unchanged; skipping write')
-            return
-        try:
-            self.write_network_map(self.network_map)
-            self._last_map_sig = sig
-        except PermissionError as e:
-            Logger.error(f"Permission denied writing network map to {self.map_path}: {e}")
-            Logger.exception(e)
-        except Exception as e:
-            Logger.error(f"Error writing network map: {type(e).__name__}: {e}")
-            Logger.exception(e)
+        """Merge discovery into the map; write to /etc only if content changed.
+
+        Runs on the main worker thread. The whole mutate+write is under
+        _map_lock because adopt_node/unadopt_node do the same from the comms
+        thread — see __init__ for why sharing the temp path matters.
+        """
+        with self._map_lock:
+            self.merge_discovered_nodes()
+            self.set_master_always_adopted()
+            self.check_missing_adopted_nodes()
+            sig = self._map_signature(self.network_map)
+            if sig == self._last_map_sig:
+                Logger.debug('network_map unchanged; skipping write')
+                return
+            try:
+                self.write_network_map(self.network_map)
+                self._last_map_sig = sig
+            except PermissionError as e:
+                Logger.error(f"Permission denied writing network map to {self.map_path}: {e}")
+                Logger.exception(e)
+            except Exception as e:
+                Logger.error(f"Error writing network map: {type(e).__name__}: {e}")
+                Logger.exception(e)
 
     def _run_worker_loop(self):
         """Resident loop: on each (debounced) avahi event or every 30 s, refresh
@@ -525,50 +556,66 @@ class CuemsNodeConf():
             Logger.debug('All adopted nodes are present')
 
     def adopt_node(self, node_uuid):
-        for node in self.network_map.values():
-            if node.uuid == node_uuid:
-                # Check if node is already adopted
-                if node.adopted:
-                    Logger.debug(f'Node {node_uuid} is already adopted')
-                    return {'OK': True, 'message': 'Node already adopted'}
-                
-                # Check if node is online
-                if not node.online:
-                    Logger.warning(f'Cannot adopt node {node_uuid}: node is offline')
-                    return {'OK': False, 'error': f'Cannot adopt node {node_uuid}: node is offline'}
-                
-                node.adopted = True
-                self.write_network_map(self.network_map)
-                Logger.info(f'Node {node_uuid} adopted')
-                return {'OK': True}
-        
-        Logger.warning(f'Node {node_uuid} not found in network_map')
-        return {'OK': False, 'error': f'Node {node_uuid} not found'}
+        """Mark a node adopted and persist the map. Called from the comms thread.
+
+        Under _map_lock: the worker loop mutates and writes the same map from
+        the main thread.
+        """
+        with self._map_lock:
+            for node in self.network_map.values():
+                if node.uuid == node_uuid:
+                    # Check if node is already adopted
+                    if node.adopted:
+                        Logger.debug(f'Node {node_uuid} is already adopted')
+                        return {'OK': True, 'message': 'Node already adopted'}
+
+                    # Check if node is online
+                    if not node.online:
+                        Logger.warning(f'Cannot adopt node {node_uuid}: node is offline')
+                        return {'OK': False, 'error': f'Cannot adopt node {node_uuid}: node is offline'}
+
+                    node.adopted = True
+                    self.write_network_map(self.network_map)
+                    # Keep the worker loop's change-detection in step with what
+                    # we just wrote, so its next tick doesn't rewrite identical
+                    # content.
+                    self._last_map_sig = self._map_signature(self.network_map)
+                    Logger.info(f'Node {node_uuid} adopted')
+                    return {'OK': True}
+
+            Logger.warning(f'Node {node_uuid} not found in network_map')
+            return {'OK': False, 'error': f'Node {node_uuid} not found'}
 
     def unadopt_node(self, node_uuid):
-        for node in self.network_map.values():
-            if node.uuid == node_uuid:
-                if node.node_type == CuemsNode.NodeType.master:
-                    Logger.warning(f'Cannot unadopt master node {node_uuid}')
-                    return {'OK': False, 'error': 'Cannot unadopt master node'}
-                
-                # Check if node is already unadopted
-                if not node.adopted:
-                    Logger.debug(f'Node {node_uuid} is already unadopted')
-                    return {'OK': True, 'message': 'Node already unadopted'}
-                
-                # Note: Offline nodes can and should be unadoptable
-                # This allows cleaning up nodes that have gone offline
-                if not node.online:
-                    Logger.info(f'Unadopting offline node {node_uuid} (node is not online)')
-                
-                node.adopted = False
-                self.write_network_map(self.network_map)
-                Logger.info(f'Node {node_uuid} unadopted')
-                return {'OK': True}
-        
-        Logger.warning(f'Node {node_uuid} not found in network_map')
-        return {'OK': False, 'error': f'Node {node_uuid} not found'}
+        """Drop a node's adoption and persist the map (comms thread).
+
+        Under _map_lock, same reason as adopt_node.
+        """
+        with self._map_lock:
+            for node in self.network_map.values():
+                if node.uuid == node_uuid:
+                    if node.node_type == CuemsNode.NodeType.master:
+                        Logger.warning(f'Cannot unadopt master node {node_uuid}')
+                        return {'OK': False, 'error': 'Cannot unadopt master node'}
+
+                    # Check if node is already unadopted
+                    if not node.adopted:
+                        Logger.debug(f'Node {node_uuid} is already unadopted')
+                        return {'OK': True, 'message': 'Node already unadopted'}
+
+                    # Note: Offline nodes can and should be unadoptable
+                    # This allows cleaning up nodes that have gone offline
+                    if not node.online:
+                        Logger.info(f'Unadopting offline node {node_uuid} (node is not online)')
+
+                    node.adopted = False
+                    self.write_network_map(self.network_map)
+                    self._last_map_sig = self._map_signature(self.network_map)
+                    Logger.info(f'Node {node_uuid} unadopted')
+                    return {'OK': True}
+
+            Logger.warning(f'Node {node_uuid} not found in network_map')
+            return {'OK': False, 'error': f'Node {node_uuid} not found'}
 
     def read_network_map(self):
         reader = XmlReader(schema_name = self.xsd_path, xmlfile = self.map_path)
