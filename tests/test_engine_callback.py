@@ -255,3 +255,34 @@ class TestMapWritesAreSerialized:
         assert result['OK'] is False
         assert 'not found' in result['error']
         mock_write.assert_not_called()
+
+
+class TestStartupMapLoadIsGuarded:
+    """start() spins up the comms thread BEFORE run() loads the map, so an
+    adopt request can land while the map is being replaced. Startup is not
+    instant — a master sleeps 5 s for slaves and may wait 30 s on firstrun
+    nodes — so the window is real, and Tier-1 rollout restarts nodeconf.
+    """
+
+    def test_run_holds_the_lock_while_replacing_the_map(self, tmp_path, monkeypatch):
+        nodeconf = CuemsNodeConf()
+        nodeconf.map_path = str(tmp_path / 'network_map.xml')
+        seen = {}
+
+        def _record():
+            seen['locked'] = nodeconf._map_lock._is_owned()
+            nodeconf.network_map = CuemsNodeDict()
+
+        monkeypatch.setattr(nodeconf, 'read_network_map', _record)
+        (tmp_path / 'network_map.xml').write_text('<CuemsNetworkMap/>')
+
+        # Drive only the map-load block of run(); everything after it needs
+        # real interfaces and avahi.
+        monkeypatch.setattr(nodeconf, 'get_ips', lambda: None)
+        nodeconf.ip = '169.254.0.1'
+        with pytest.raises(Exception):
+            # Zeroconf() right after the block will fail in this environment;
+            # by then the assertion we care about has already been recorded.
+            nodeconf.run()
+
+        assert seen.get('locked') is True

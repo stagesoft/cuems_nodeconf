@@ -54,12 +54,14 @@ class CuemsNodeConf():
         self._dirty = threading.Event()
         # Signature of the last map we wrote, so we only rewrite /etc on change.
         self._last_map_sig = None
-        # Serializes mutate+write of self.network_map. Two threads reach it: the
-        # main worker loop (avahi events / the 30 s tick) and the comms thread
-        # (adopt/unadopt over /tmp/nodeconf.ipc). Both render through the SAME
-        # temp path (map.tmp.<pid>) before os.replace, so without this lock two
-        # concurrent writers can clobber that file and promote a truncated map
-        # that neither the engine nor the editor can load.
+        # Serializes mutate+write of self.network_map. THREE places touch it:
+        # run()'s startup load, the main worker loop (avahi events / the 30 s
+        # tick) and the comms thread (adopt/unadopt over /tmp/nodeconf.ipc).
+        # The last two render through the SAME temp path (map.tmp.<pid>) before
+        # os.replace, so without this lock two concurrent writers can clobber
+        # that file and promote a truncated map that neither the engine nor the
+        # editor can load. The startup load never writes, but it does REPLACE
+        # the dict while the comms thread may already be iterating it.
         self._map_lock = threading.RLock()
         # Lazily-created collaborators (so stop() can tear them down safely).
         self.communications_thread = None
@@ -176,13 +178,20 @@ class CuemsNodeConf():
             Logger.critical('Failed to obtain network IP address. Cannot continue.')
             sys.exit(-1)
 
-        self.is_first_run = not os.path.isfile(self.map_path)
-        if not self.is_first_run:
-            Logger.debug('Reading existing network_map.xml')
-            self.read_network_map()
-        else:
-            Logger.debug('No existing network_map.xml found, starting fresh')
-            self.network_map = CuemsNodeDict()
+        # Under _map_lock: set_comms() ran before us (see start()), so the
+        # comms thread is ALREADY accepting adopt/unadopt requests while we
+        # replace the map here. Startup is not instant either — a master sleeps
+        # 5 s for slaves to appear and may wait up to 30 s on firstrun nodes —
+        # so this window is wide enough for a UI click to land inside it and
+        # iterate a dict we are in the middle of replacing.
+        with self._map_lock:
+            self.is_first_run = not os.path.isfile(self.map_path)
+            if not self.is_first_run:
+                Logger.debug('Reading existing network_map.xml')
+                self.read_network_map()
+            else:
+                Logger.debug('No existing network_map.xml found, starting fresh')
+                self.network_map = CuemsNodeDict()
 
         self.zeroconf = Zeroconf(interfaces=[self.ip],ip_version=IPVersion.V4Only)
 
