@@ -38,6 +38,23 @@ if 'dbus' not in sys.modules:
     sys.modules['dbus'] = _dbus_stub
     sys.modules['dbus.exceptions'] = _dbus_exceptions_stub
 
+# Patch systemd for the same reason as dbus, above.
+#
+# systemd-python is a compiled extension built against libsystemd; pip cannot
+# build it without libsystemd-dev, which a plain dev checkout has no reason to
+# carry (on a packaged node it arrives as python3-systemd via
+# dh_virtualenv --use-system-packages, see pyproject.toml). CuemsNodeConf.py's
+# only use is notify_systemd() -> systemd.daemon.notify('READY=1'), the
+# Type=notify handshake — meaningless outside a real unit and not exercised by
+# any test — so a MagicMock stands in. Tests that care assert on the call.
+if 'systemd' not in sys.modules:
+    _systemd_stub = types.ModuleType('systemd')
+    _systemd_daemon_stub = types.ModuleType('systemd.daemon')
+    _systemd_daemon_stub.notify = MagicMock(name='systemd.daemon.notify')
+    _systemd_stub.daemon = _systemd_daemon_stub
+    sys.modules['systemd'] = _systemd_stub
+    sys.modules['systemd.daemon'] = _systemd_daemon_stub
+
 # Patch netifaces BEFORE any imports that might use it
 # This needs to happen at module load time, not in a fixture
 
