@@ -125,3 +125,52 @@ class TestEngineCallback:
             # Should still call respond_to_engine with error response
             assert mock_run.called
 
+
+
+class TestEveryRequestGetsAnAnswer:
+    """A Req/Rep socket must never be left hanging.
+
+    Before the else-branch in engine_callback, a well-formed message carrying
+    any action other than 'nodelist_modify' returned without responding. The
+    engine then blocked on its own 15 s IPC timeout and the operator saw an
+    unexplained stall with nothing in either log to explain it.
+    """
+
+    def _nodeconf(self):
+        nodeconf = CuemsNodeConf()
+        nodeconf.network_map = NodeIndex()
+        nodeconf.communications_thread = MagicMock()
+        nodeconf.communications_thread.event_loop = MagicMock()
+        nodeconf.communications_thread.respond_to_engine = MagicMock()
+        return nodeconf
+
+    def test_unknown_action_is_answered(self):
+        nodeconf = self._nodeconf()
+        with patch('asyncio.run_coroutine_threadsafe') as mock_run:
+            nodeconf.engine_callback({'action': 'nodeconf'}, MagicMock())
+
+        assert mock_run.called, 'unknown action must still get a reply'
+        response = nodeconf.communications_thread.respond_to_engine.call_args[0][0]
+        assert response['OK'] is False
+        assert 'unknown action' in response['error']
+        assert 'nodeconf' in response['error']
+
+    def test_missing_action_is_answered(self):
+        nodeconf = self._nodeconf()
+        with patch('asyncio.run_coroutine_threadsafe') as mock_run:
+            nodeconf.engine_callback({'value': 'whatever'}, MagicMock())
+
+        assert mock_run.called
+        response = nodeconf.communications_thread.respond_to_engine.call_args[0][0]
+        assert response['OK'] is False
+        assert 'unknown action' in response['error']
+
+    def test_non_dict_message_is_answered(self):
+        """The editor's legacy `nodeconf` action arrives as a bare '' string."""
+        nodeconf = self._nodeconf()
+        with patch('asyncio.run_coroutine_threadsafe') as mock_run:
+            nodeconf.engine_callback('', MagicMock())
+
+        assert mock_run.called
+        response = nodeconf.communications_thread.respond_to_engine.call_args[0][0]
+        assert response['OK'] is False

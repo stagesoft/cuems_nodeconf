@@ -111,6 +111,15 @@ class CuemsNodeConf():
         self.communications_thread.start()
 
     def engine_callback(self, message, context):
+        """Handle one request from the engine over /tmp/nodeconf.ipc.
+
+        EVERY path must answer. This is an NNG Req/Rep socket: a request we
+        return from without responding leaves the engine blocked until its own
+        15 s timeout, which surfaces to the operator as an unexplained stall.
+        Before the else-branch below, any well-formed message carrying an action
+        other than 'nodelist_modify' fell off the end of the if and did exactly
+        that.
+        """
         try:
             action = message.get('action')
             if action == 'nodelist_modify':
@@ -133,6 +142,15 @@ class CuemsNodeConf():
                     self.communications_thread.event_loop
                 )
                 return
+
+            Logger.warning(f'Unknown action from engine: {action!r}')
+            asyncio.run_coroutine_threadsafe(
+                self.communications_thread.respond_to_engine(
+                    {'OK': False, 'error': f'unknown action: {action}'}, context
+                ),
+                self.communications_thread.event_loop
+            )
+            return
         except Exception as e:
             Logger.error(f'Error in engine_callback: {e}')
             Logger.exception(e)
